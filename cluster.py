@@ -20,9 +20,9 @@ class Gauge(Widget):
         with self.canvas:
             self.draw_gauge()
 
-        self.label = Label(text=f"{self.title}: 0 {self.unit}", size_hint=(None, None),
-                           pos=(self.x + self.width / 4, self.y - 30), font_size='16sp')
-        self.add_widget(self.label)
+        # self.label = Label(text=f"{self.title}: 0 {self.unit}", size_hint=(None, None),
+        #                    pos=(self.x + self.width / 4, self.y - 30), font_size='16sp')
+        # self.add_widget(self.label)
 
         Clock.schedule_once(self.init_needle, 0)
 
@@ -35,7 +35,7 @@ class Gauge(Widget):
         Ellipse(pos=self.pos, size=self.size)
 
         # Draw ticks and numbers
-        tick_count = 9
+        tick_count = 12
         for i in range(tick_count + 1):
             # FIX: Flip direction — low values on the left
             angle_deg = -130 + ((tick_count - i) / tick_count) * -260
@@ -53,8 +53,8 @@ class Gauge(Widget):
 
             # Number labels
             value = int(((tick_count - i) / tick_count) * self.max_value)
-            label_x = center_x + (radius * 1.15) * math.cos(angle_rad) - 10
-            label_y = center_y + (radius * 1.15) * math.sin(angle_rad) - 10
+            label_x = center_x + (radius * 1.20) * math.cos(angle_rad) - 48
+            label_y = center_y + (radius * 1.20) * math.sin(angle_rad) - 48
             self.add_widget(Label(text=str(value), pos=(label_x, label_y), font_size='12sp'))
 
         # Add gauge title
@@ -78,17 +78,17 @@ class Gauge(Widget):
         self.needle_angle = angle
         if hasattr(self, 'rot'):
             self.rot.angle = angle
-        self.label.text = f"{self.title}: {int(clamped)} {self.unit}"
+        # self.label.text = f"{self.title}: {int(clamped)} {self.unit}"
 
 class Dashboard(Widget):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
         self.speed_gauge = Gauge(title="Speed", max_value=240, unit="km/h", size=(300, 300), pos=(50, 150))
-        self.rpm_gauge = Gauge(title="RPM", max_value=8000, unit="rpm", size=(300, 300), pos=(400, 150))
+        # self.rpm_gauge = Gauge(title="RPM", max_value=8000, unit="rpm", size=(300, 300), pos=(400, 150))
 
         self.add_widget(self.speed_gauge)
-        self.add_widget(self.rpm_gauge)
+        # self.add_widget(self.rpm_gauge)
 
         Clock.schedule_interval(self.simulate_data, 0.5)
 
@@ -97,7 +97,7 @@ class Dashboard(Widget):
         rpm = random.uniform(0, 8000)
 
         self.speed_gauge.update_value(speed)
-        self.rpm_gauge.update_value(rpm)
+        # self.rpm_gauge.update_value(rpm)
 
 class CarClusterApp(App):
     def build(self):
