@@ -1,43 +1,119 @@
 import can
 import struct
 
-# FT450 simplified broadcast packet #2
-FT450_ID_02 = 0x14080602
+# Define FT450 simplified broadcast packet IDs
+FT450_IDS = {
+    0x14080600: "TPS/MAP/Air Temp/Engine Temp",
+    0x14080601: "Oil/Fuel/Water Pressure + Gear",
+    0x14080602: "Exhaust O2 / RPM / Oil Temp / Pit Limit",
+    0x14080603: "Wheel Speeds FR/FL/RR/RL",
+    0x14080604: "Traction Ctrl: Slip/Retard/Cut/Heading",
+    0x14080605: "Shock Sensors FR/FL/RR/RL",
+    0x14080606: "G-Forces: Accel/Lateral/Yaw",
+    0x14080607: "Lambda Corr / Fuel Flow / Inj Times",
+    0x14080608: "Oil Temp / Trans Temp / Fuel Consump / Brake Pressure"
+}
 
-def parse_ft450_packet_02(msg):
-    if msg.arbitration_id != FT450_ID_02 or len(msg.data) < 5:
-        return None
-
-    # According to manual:
-    # Byte 0: Exhaust O2 (0–255) → lambda or AFR depending on config
-    # Byte 1–2: RPM (2 bytes, Big Endian)
-    # Byte 3: Oil Temp (°C * 0.1)
-    # Byte 4: Pit Limit (0 = off, 1 = on)
-
-    exhaust_o2 = msg.data[0]  # raw value
-    rpm = struct.unpack('>H', msg.data[1:3])[0]
-    oil_temp = msg.data[3] * 0.1  # °C
-    pit_limit = msg.data[4]
-
+# Parser functions for each packet type
+def parse_0x14080600(data):
     return {
-        "exhaust_o2": exhaust_o2,
-        "rpm": rpm,
-        "oil_temp_c": oil_temp,
-        "pit_limit": bool(pit_limit)
+        "TPS_%": data[0] * 0.5,           # 0–100% (scale 0.5)
+        "MAP_kPa": data[1] * 2,           # 0–500kPa
+        "Air_Temp_C": data[2] * 0.1,
+        "Engine_Temp_C": data[3] * 0.1,
     }
 
-def listen_for_ft450_packets(interface='can0'):
-    bus = can.interface.Bus(channel=interface, bustype='socketcan')
-    print("Listening for FT450 simplified broadcast packets...")
+def parse_0x14080601(data):
+    return {
+        "Oil_Pressure_kPa": data[0] * 0.5,
+        "Fuel_Pressure_kPa": data[1] * 0.5,
+        "Water_Pressure_kPa": data[2] * 0.5,
+        "Gear": data[3],
+    }
+
+def parse_0x14080602(data):
+    rpm = struct.unpack('>H', data[1:3])[0]
+    return {
+        "Exhaust_O2_raw": data[0],  # No unit defined — maybe AFR or lambda depending on config
+        "RPM": rpm,
+        "Oil_Temp_C": data[3] * 0.1,
+        "Pit_Limit": bool(data[4]),
+    }
+
+def parse_0x14080603(data):
+    return {
+        "Wheel_Speed_FR": data[0],
+        "Wheel_Speed_FL": data[1],
+        "Wheel_Speed_RR": data[2],
+        "Wheel_Speed_RL": data[3],
+    }
+
+def parse_0x14080604(data):
+    return {
+        "TC_Slip": data[0],
+        "TC_Retard_deg": data[1] * 0.25,
+        "TC_Cut_%": data[2] * 0.5,
+        "Heading_deg": data[3] * 2,
+    }
+
+def parse_0x14080605(data):
+    return {
+        "Shock_FR": data[0],
+        "Shock_FL": data[1],
+        "Shock_RR": data[2],
+        "Shock_RL": data[3],
+    }
+
+def parse_0x14080606(data):
+    return {
+        "Accel_G": (data[0] - 127) * 0.01,
+        "Lateral_G": (data[1] - 127) * 0.01,
+        "Yaw_Front": data[2],   # unit not specified
+        "Yaw_Lateral": data[3], # unit not specified
+    }
+
+def parse_0x14080607(data):
+    return {
+        "Lambda_Corr_%": data[0] * 0.5,
+        "Fuel_Flow_cc": data[1],
+        "Inj_Time_Bank_A_ms": data[2] * 0.1,
+        "Inj_Time_Bank_B_ms": data[3] * 0.1,
+    }
+
+def parse_0x14080608(data):
+    return {
+        "Oil_Temp_C": data[0] * 0.1,
+        "Trans_Temp_C": data[1] * 0.1,
+        "Fuel_Consumption_L": data[2] * 0.1,
+        "Brake_Pressure_kPa": data[3] * 0.5,
+    }
+
+# Map CAN ID to parser
+PARSERS = {
+    0x14080600: parse_0x14080600,
+    0x14080601: parse_0x14080601,
+    0x14080602: parse_0x14080602,
+    0x14080603: parse_0x14080603,
+    0x14080604: parse_0x14080604,
+    0x14080605: parse_0x14080605,
+    0x14080606: parse_0x14080606,
+    0x14080607: parse_0x14080607,
+    0x14080608: parse_0x14080608,
+}
+
+def main(interface='can0', bustype='socketcan'):
+    print("Starting FTCAN 2.0 listener for FT450...")
+    bus = can.interface.Bus(channel=interface, bustype=bustype)
+
     try:
         while True:
             msg = bus.recv()
-            if msg.arbitration_id == FT450_ID_02:
-                parsed = parse_ft450_packet_02(msg)
-                if parsed:
-                    print(parsed)
+            if msg.arbitration_id in PARSERS:
+                parsed = PARSERS[msg.arbitration_id](msg.data)
+                print(f"[{hex(msg.arbitration_id)}] {FT450_IDS[msg.arbitration_id]}:\n  {parsed}\n")
+
     except KeyboardInterrupt:
         print("Stopped.")
 
-# Start listening
-listen_for_ft450_packets()
+if __name__ == "__main__":
+    main()
