@@ -37,6 +37,15 @@ class Gauge(Widget):
         # Schedule update to smooth the needle every frame (60fps)
         Clock.schedule_interval(self.smooth_update, 1 / 60.)
 
+        self.value_label = Label(text="0", font_size='32sp', bold=True,
+                         pos=(self.center_x, self.center_y),
+                         size_hint=(None, None),
+                         size=(100, 50),
+                         halign='center', valign='middle',
+                         color=(1,1,1,1))
+        self.value_label.bind(size=self.value_label.setter('text_size'))
+        self.add_widget(self.value_label)
+
     def draw_gauge(self):
         center_x, center_y = self.center
         radius = min(self.width, self.height) / 2
@@ -64,9 +73,9 @@ class Gauge(Widget):
 
             # Number labels
             value = int(((tick_count - i) / tick_count) * self.max_value)
-            label_x = center_x + (radius * 1.20) * math.cos(angle_rad) - 48
-            label_y = center_y + (radius * 1.20) * math.sin(angle_rad) - 48
-            self.add_widget(Label(text=str(value), pos=(label_x, label_y), font_size='12sp'))
+            label_x = center_x + (radius * 0.7) * math.cos(angle_rad) - 48
+            label_y = center_y + (radius * 0.7) * math.sin(angle_rad) - 48
+            self.add_widget(Label(text=f'[b]{str(value)}[/b]', pos=(label_x, label_y), font_size='18sp',  markup=True))
 
         # Add gauge title
         self.add_widget(Label(text=self.title, pos=(self.center_x - 30, self.y + 10), font_size='16sp'))
@@ -79,14 +88,25 @@ class Gauge(Widget):
             PushMatrix()
             self.rot = Rotate(origin=(self.center_x, self.center_y), angle=self.needle_angle)
             Color(1, 0, 0)
-            self.needle = Line(points=[self.center_x, self.center_y,
-                                       self.center_x, self.center_y + self.height / 2.5], width=2)
+            start_y = self.center_y + 150  # offset > 0
+            end_y = self.center_y + self.height / 2.5
+
+            self.needle = Line(points=[self.center_x, start_y,
+                                    self.center_x, end_y], width=4)
+
+            # self.needle = Line(points=[self.center_x, self.center_y,
+            #                            self.center_x, self.center_y + self.height / 2.5], width=2)
             PopMatrix()
 
     def update_value(self, value):
         clamped = max(0, min(value, self.max_value))
         angle = -130 + (clamped / self.max_value) * 260
         self.needle_angle = angle  # Set target angle
+
+        # Update the center numeric label text
+        self.value_label.text = f"{int(clamped)}"
+        # Update label position to center (in case size/pos changed)
+        self.value_label.center = self.center
 
     def smooth_update(self, dt):
         # Interpolate current_angle towards needle_angle
@@ -102,11 +122,16 @@ class Dashboard(Widget):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
+        # Speed and RPM gauges
         self.speed_gauge = Gauge(title="Speed", max_value=240, unit="km/h", size=(600, 600), pos=(100, 60), ticks=12)
-        self.rpm_gauge = Gauge(title="RPM", max_value=8000, unit="rpm", size=(600, 600), pos=(1220, 60), ticks=8)
+        self.rpm_gauge = Gauge(title="RPM", max_value=8, unit="rpm", size=(600, 600), pos=(1220, 60), ticks=8)
+
+        # Fuel gauge - smaller, positioned between the others
+        self.fuel_gauge = Gauge(title="⛽", max_value=100, unit="%", size=(200, 200), pos=(860, 60), ticks=2)
 
         self.add_widget(self.speed_gauge)
         self.add_widget(self.rpm_gauge)
+        self.add_widget(self.fuel_gauge)
 
         Clock.schedule_interval(self.simulate_data, 0.5)
 
@@ -115,10 +140,12 @@ class Dashboard(Widget):
 
     def simulate_data(self, dt):
         speed = random.uniform(0, 240)
-        rpm = random.uniform(0, 8000)
+        rpm = random.uniform(0, 8)
+        fuel = random.uniform(10, 100)  # Simulate more stable fuel levels
 
         self.speed_gauge.update_value(speed)
         self.rpm_gauge.update_value(rpm)
+        self.fuel_gauge.update_value(fuel)
 
 class CarClusterApp(App):
     def build(self):
