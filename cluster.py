@@ -7,24 +7,35 @@ from kivy.clock import Clock
 import math
 import random
 
+from kivy.config import Config
+Config.set('graphics', 'fullscreen', '0')  # Windowed mode
+Config.set('graphics', 'width', '1920')
+Config.set('graphics', 'height', '720')
+
 kivy.require('2.0.0')
 
+from kivy.core.window import Window
+
+print("Window size:", Window.size)
+
+
 class Gauge(Widget):
-    def __init__(self, title="Speed", max_value=180, unit="km/h", **kwargs):
+    def __init__(self, title="Speed", max_value=180, unit="km/h", ticks=10, **kwargs):
         super().__init__(**kwargs)
         self.title = title
         self.max_value = max_value
         self.unit = unit
-        self.needle_angle = -130  # Starting angle
+        self.ticks = ticks
+        self.needle_angle = -130  # Target angle
+        self.current_angle = -130  # Smoothed current angle
 
         with self.canvas:
             self.draw_gauge()
 
-        # self.label = Label(text=f"{self.title}: 0 {self.unit}", size_hint=(None, None),
-        #                    pos=(self.x + self.width / 4, self.y - 30), font_size='16sp')
-        # self.add_widget(self.label)
-
         Clock.schedule_once(self.init_needle, 0)
+
+        # Schedule update to smooth the needle every frame (60fps)
+        Clock.schedule_interval(self.smooth_update, 1 / 60.)
 
     def draw_gauge(self):
         center_x, center_y = self.center
@@ -35,7 +46,7 @@ class Gauge(Widget):
         Ellipse(pos=self.pos, size=self.size)
 
         # Draw ticks and numbers
-        tick_count = 12
+        tick_count = self.ticks
         for i in range(tick_count + 1):
             # FIX: Flip direction — low values on the left
             angle_deg = -130 + ((tick_count - i) / tick_count) * -260
@@ -75,29 +86,39 @@ class Gauge(Widget):
     def update_value(self, value):
         clamped = max(0, min(value, self.max_value))
         angle = -130 + (clamped / self.max_value) * 260
-        self.needle_angle = angle
+        self.needle_angle = angle  # Set target angle
+
+    def smooth_update(self, dt):
+        # Interpolate current_angle towards needle_angle
+        smoothing_speed = 5  # bigger is faster
+        diff = self.needle_angle - self.current_angle
+        self.current_angle += diff * smoothing_speed * dt
+
+        # Update rotation
         if hasattr(self, 'rot'):
-            self.rot.angle = angle
-        # self.label.text = f"{self.title}: {int(clamped)} {self.unit}"
+            self.rot.angle = self.current_angle
 
 class Dashboard(Widget):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        self.speed_gauge = Gauge(title="Speed", max_value=240, unit="km/h", size=(300, 300), pos=(50, 150))
-        # self.rpm_gauge = Gauge(title="RPM", max_value=8000, unit="rpm", size=(300, 300), pos=(400, 150))
+        self.speed_gauge = Gauge(title="Speed", max_value=240, unit="km/h", size=(600, 600), pos=(100, 60), ticks=12)
+        self.rpm_gauge = Gauge(title="RPM", max_value=8000, unit="rpm", size=(600, 600), pos=(1220, 60), ticks=8)
 
         self.add_widget(self.speed_gauge)
-        # self.add_widget(self.rpm_gauge)
+        self.add_widget(self.rpm_gauge)
 
         Clock.schedule_interval(self.simulate_data, 0.5)
+
+        from kivy.core.window import Window
+        Window.size = (1920 / 2, 720 / 2)
 
     def simulate_data(self, dt):
         speed = random.uniform(0, 240)
         rpm = random.uniform(0, 8000)
 
         self.speed_gauge.update_value(speed)
-        # self.rpm_gauge.update_value(rpm)
+        self.rpm_gauge.update_value(rpm)
 
 class CarClusterApp(App):
     def build(self):
@@ -105,3 +126,8 @@ class CarClusterApp(App):
 
 if __name__ == '__main__':
     CarClusterApp().run()
+    from kivy.core.window import Window
+
+        # Window.size = (1920, 720)
+    print(Window.size)
+    
