@@ -11,17 +11,19 @@ FT450_IDS = {
     0x14080605: "Shock Sensors FR/FL/RR/RL",
     0x14080606: "G-Forces: Accel/Lateral/Yaw",
     0x14080607: "Lambda Corr / Fuel Flow / Inj Times",
-    0x14080608: "Oil Temp / Trans Temp / Fuel Consump / Brake Pressure"
+    0x14080608: "Oil Temp / Trans Temp / Fuel Consump / Brake Pressure",
 }
+
 
 # Parser functions for each packet type
 def parse_0x14080600(data):
     return {
-        "TPS_%": data[0] * 0.5,           # 0–100% (scale 0.5)
-        "MAP_kPa": data[1] * 2,           # 0–500kPa
+        "TPS_%": data[0] * 0.5,  # 0–100% (scale 0.5)
+        "MAP_kPa": data[1] * 2,  # 0–500kPa
         "Air_Temp_C": data[2] * 0.1,
         "Engine_Temp_C": data[3] * 0.1,
     }
+
 
 def parse_0x14080601(data):
     return {
@@ -31,14 +33,18 @@ def parse_0x14080601(data):
         "Gear": data[3],
     }
 
+
 def parse_0x14080602(data):
-    rpm = struct.unpack('>H', data[1:3])[0]
+    rpm = struct.unpack(">H", data[1:3])[0]
     return {
-        "Exhaust_O2_raw": data[0],  # No unit defined — maybe AFR or lambda depending on config
+        "Exhaust_O2_raw": data[
+            0
+        ],  # No unit defined — maybe AFR or lambda depending on config
         "RPM": rpm,
         "Oil_Temp_C": data[3] * 0.1,
         "Pit_Limit": bool(data[4]),
     }
+
 
 def parse_0x14080603(data):
     return {
@@ -48,6 +54,7 @@ def parse_0x14080603(data):
         "Wheel_Speed_RL": data[3],
     }
 
+
 def parse_0x14080604(data):
     return {
         "TC_Slip": data[0],
@@ -55,6 +62,7 @@ def parse_0x14080604(data):
         "TC_Cut_%": data[2] * 0.5,
         "Heading_deg": data[3] * 2,
     }
+
 
 def parse_0x14080605(data):
     return {
@@ -64,13 +72,15 @@ def parse_0x14080605(data):
         "Shock_RL": data[3],
     }
 
+
 def parse_0x14080606(data):
     return {
         "Accel_G": (data[0] - 127) * 0.01,
         "Lateral_G": (data[1] - 127) * 0.01,
-        "Yaw_Front": data[2],   # unit not specified
-        "Yaw_Lateral": data[3], # unit not specified
+        "Yaw_Front": data[2],  # unit not specified
+        "Yaw_Lateral": data[3],  # unit not specified
     }
+
 
 def parse_0x14080607(data):
     return {
@@ -80,6 +90,7 @@ def parse_0x14080607(data):
         "Inj_Time_Bank_B_ms": data[3] * 0.1,
     }
 
+
 def parse_0x14080608(data):
     return {
         "Oil_Temp_C": data[0] * 0.1,
@@ -87,6 +98,7 @@ def parse_0x14080608(data):
         "Fuel_Consumption_L": data[2] * 0.1,
         "Brake_Pressure_kPa": data[3] * 0.5,
     }
+
 
 # Map CAN ID to parser
 PARSERS = {
@@ -101,7 +113,8 @@ PARSERS = {
     0x14080608: parse_0x14080608,
 }
 
-def main(interface='can0', bustype='socketcan'):
+
+def main(interface="can0", bustype="socketcan"):
     print("Starting FTCAN 2.0 listener for FT450...")
     bus = can.interface.Bus(channel=interface, bustype=bustype)
 
@@ -110,10 +123,13 @@ def main(interface='can0', bustype='socketcan'):
             msg = bus.recv()
             if msg.arbitration_id in PARSERS:
                 parsed = PARSERS[msg.arbitration_id](msg.data)
-                print(f"[{hex(msg.arbitration_id)}] {FT450_IDS[msg.arbitration_id]}:\n  {parsed}\n")
+                print(
+                    f"[{hex(msg.arbitration_id)}] {FT450_IDS[msg.arbitration_id]}:\n  {parsed}\n"
+                )
 
     except KeyboardInterrupt:
         print("Stopped.")
+
 
 if __name__ == "__main__":
     main()
