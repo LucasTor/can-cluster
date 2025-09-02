@@ -22,6 +22,9 @@ from kivy.core.window import Window
 
 print("Window size:", Window.size)
 
+from kivy.core.text import LabelBase, DEFAULT_FONT
+LabelBase.register(DEFAULT_FONT, './Michroma.ttf') 
+
 class Gauge(Widget):
     def __init__(self, title="Speed", max_value=180, unit="km/h", ticks=10, angle_range=270, label_map={}, **kwargs):
         super().__init__(**kwargs)
