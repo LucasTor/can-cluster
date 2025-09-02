@@ -13,7 +13,7 @@ import random
 
 from kivy.config import Config
 
-Config.set("graphics", "fullscreen", "0")  # Windowed mode
+Config.set("graphics", "fullscreen", "0")
 Config.set("graphics", "width", "1920")
 Config.set("graphics", "height", "720")
 
@@ -48,15 +48,14 @@ class Gauge(Widget):
         self.angle_range = angle_range
         self.label_map = label_map
         self.show_title = show_digital_value
-        self.needle_angle = -45  # Target angle
-        self.current_angle = -45  # Smoothed current angle
+        self.needle_angle = -45
+        self.current_angle = -45
 
         with self.canvas:
             self.draw_gauge()
 
         Clock.schedule_once(self.init_needle, 0)
 
-        # Schedule update to smooth the needle every frame (60fps)
         Clock.schedule_interval(self.smooth_update, 1 / 60.0)
 
         self.value_label = Label(
@@ -78,11 +77,9 @@ class Gauge(Widget):
         center_x, center_y = self.center
         radius = min(self.width, self.height) / 2
 
-        # Background circle
         Color(0.1, 0.1, 0.1)
         Ellipse(pos=self.pos, size=self.size)
 
-        # Draw ticks and numbers
         tick_count = self.ticks
         tick_angle = (-self.angle_range) / (tick_count - 1)
 
@@ -115,7 +112,6 @@ class Gauge(Widget):
                 )
             )
 
-        # Add gauge title
         self.add_widget(
             Label(
                 text=self.title,
@@ -150,20 +146,18 @@ class Gauge(Widget):
         angle = -(
             (-self.angle_range / 2) + ((clamped / self.max_value) * self.angle_range)
         )
-        self.needle_angle = angle  # Set target angle
+        self.needle_angle = angle
 
-        # Update the center numeric label text
         self.value_label.text = f"{int(clamped)}"
-        # Update label position to center (in case size/pos changed)
+
         self.value_label.center = self.center
 
     def smooth_update(self, dt):
-        # Interpolate current_angle towards needle_angle
-        smoothing_speed = 5  # bigger is faster
+
+        smoothing_speed = 5
         diff = self.needle_angle - self.current_angle
         self.current_angle += diff * smoothing_speed * dt
 
-        # Update rotation
         if hasattr(self, "rot"):
             self.rot.angle = self.current_angle
 
@@ -172,7 +166,6 @@ class Dashboard(Widget):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        # Speed and RPM gauges
         self.speed_gauge = Gauge(
             title="SPEED",
             max_value=240,
@@ -201,7 +194,6 @@ class Dashboard(Widget):
             },
         )
 
-        # Fuel gauge - smaller, positioned between the others
         self.fuel_gauge = Gauge(
             title="",
             max_value=100,
@@ -227,7 +219,7 @@ class Dashboard(Widget):
     def simulate_data(self, dt):
         speed = random.uniform(0, 250)
         rpm = random.uniform(0, 8000)
-        fuel = random.uniform(10, 100)  # Simulate more stable fuel levels
+        fuel = random.uniform(10, 100)
 
         self.speed_gauge.update_value(speed)
         self.rpm_gauge.update_value(rpm)
@@ -243,5 +235,4 @@ if __name__ == "__main__":
     CarClusterApp().run()
     from kivy.core.window import Window
 
-    # Window.size = (1920, 720)
     print(Window.size)
