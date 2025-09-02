@@ -1,3 +1,7 @@
+
+import logging
+logging.getLogger("kivy").setLevel(logging.CRITICAL)
+
 import kivy
 from kivy.app import App
 from kivy.uix.widget import Widget
@@ -18,16 +22,17 @@ from kivy.core.window import Window
 
 print("Window size:", Window.size)
 
-
 class Gauge(Widget):
-    def __init__(self, title="Speed", max_value=180, unit="km/h", ticks=10, **kwargs):
+    def __init__(self, title="Speed", max_value=180, unit="km/h", ticks=10, angle_range=270, label_map={}, **kwargs):
         super().__init__(**kwargs)
         self.title = title
         self.max_value = max_value
         self.unit = unit
         self.ticks = ticks
-        self.needle_angle = -130  # Target angle
-        self.current_angle = -130  # Smoothed current angle
+        self.angle_range = angle_range
+        self.label_map = label_map
+        self.needle_angle = -45  # Target angle
+        self.current_angle = -45  # Smoothed current angle
 
         with self.canvas:
             self.draw_gauge()
@@ -56,9 +61,10 @@ class Gauge(Widget):
 
         # Draw ticks and numbers
         tick_count = self.ticks
-        for i in range(tick_count + 1):
-            # FIX: Flip direction — low values on the left
-            angle_deg = -130 + ((tick_count - i) / tick_count) * -260
+        tick_angle = (- self.angle_range) / (tick_count - 1)
+
+        for i in range(0, tick_count):
+            angle_deg = (- 90 - ((360 - self.angle_range) / 2)) + (tick_angle * i) 
             angle_rad = math.radians(angle_deg)
             inner_radius = radius * 0.8
             outer_radius = radius * 0.95
@@ -71,11 +77,11 @@ class Gauge(Widget):
             Color(1, 1, 1)
             Line(points=[x1, y1, x2, y2], width=2)
 
-            # Number labels
-            value = int(((tick_count - i) / tick_count) * self.max_value)
+            value = int((i / (tick_count - 1)) * self.max_value)
             label_x = center_x + (radius * 0.7) * math.cos(angle_rad) - 48
             label_y = center_y + (radius * 0.7) * math.sin(angle_rad) - 48
-            self.add_widget(Label(text=f'[b]{str(value)}[/b]', pos=(label_x, label_y), font_size='18sp',  markup=True))
+            label = self.label_map.get(value, value)
+            self.add_widget(Label(text=f'[b]{str(label)}[/b]', pos=(label_x, label_y), font_size='18sp',  markup=True))
 
         # Add gauge title
         self.add_widget(Label(text=self.title, pos=(self.center_x - 30, self.y + 10), font_size='16sp'))
@@ -94,13 +100,12 @@ class Gauge(Widget):
             self.needle = Line(points=[self.center_x, start_y,
                                     self.center_x, end_y], width=4)
 
-            # self.needle = Line(points=[self.center_x, self.center_y,
-            #                            self.center_x, self.center_y + self.height / 2.5], width=2)
             PopMatrix()
 
     def update_value(self, value):
         clamped = max(0, min(value, self.max_value))
-        angle = -130 + (clamped / self.max_value) * 260
+        # angle_deg = - 45 + (i / tick_count) * 270
+        angle = - 45 + (clamped / self.max_value) * 270
         self.needle_angle = angle  # Set target angle
 
         # Update the center numeric label text
@@ -123,24 +128,30 @@ class Dashboard(Widget):
         super().__init__(**kwargs)
 
         # Speed and RPM gauges
-        self.speed_gauge = Gauge(title="Speed", max_value=240, unit="km/h", size=(600, 600), pos=(100, 60), ticks=12)
-        self.rpm_gauge = Gauge(title="RPM", max_value=8, unit="rpm", size=(600, 600), pos=(1220, 60), ticks=8)
+        self.speed_gauge = Gauge(title="Speed", max_value=240, unit="km/h", size=(600, 600), pos=(100, 60), ticks=13, angle_range=270,)
+        self.rpm_gauge = Gauge(title="RPM", max_value=8000, unit="rpm", size=(600, 600), pos=(1220, 60), ticks=9)
 
         # Fuel gauge - smaller, positioned between the others
-        self.fuel_gauge = Gauge(title="⛽", max_value=100, unit="%", size=(200, 200), pos=(860, 60), ticks=2)
+        self.fuel_gauge = Gauge(title="⛽", max_value=100, unit="%", size=(200, 200), pos=(860, 60), ticks=5, angle_range=270, label_map={
+            0: 'E',
+            25: '',
+            50: '',
+            75: '',
+            100: 'F'
+        })
 
         self.add_widget(self.speed_gauge)
         self.add_widget(self.rpm_gauge)
         self.add_widget(self.fuel_gauge)
 
-        Clock.schedule_interval(self.simulate_data, 0.5)
+        Clock.schedule_interval(self.simulate_data, 2)
 
         from kivy.core.window import Window
         Window.size = (1920 / 2, 720 / 2)
 
     def simulate_data(self, dt):
-        speed = random.uniform(0, 240)
-        rpm = random.uniform(0, 8)
+        speed = random.uniform(0, 250)
+        rpm = random.uniform(0, 8000)
         fuel = random.uniform(10, 100)  # Simulate more stable fuel levels
 
         self.speed_gauge.update_value(speed)
