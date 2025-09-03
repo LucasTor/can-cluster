@@ -1,7 +1,4 @@
-import logging
-
-logging.getLogger("kivy").setLevel(logging.CRITICAL)
-
+import os
 import kivy
 from kivy.app import App
 from kivy.uix.widget import Widget
@@ -13,20 +10,21 @@ from kivy.core.text import LabelBase, DEFAULT_FONT
 from kivy.config import Config
 from kivy.uix.gridlayout import GridLayout
 from kivy.animation import Animation
+from kivy.uix.boxlayout import BoxLayout
 
 import math
 import random
 
-Config.set("graphics", "fullscreen", "0")
-Config.set("graphics", "width", "1920")
-Config.set("graphics", "height", "720")
+PROD = bool(os.environ.get('PROD', False))
+
+if not PROD:
+    Config.set("graphics", "fullscreen", "0")
+    Config.set("graphics", "width", "1920")
+    Config.set("graphics", "height", "720")
 
 kivy.require("2.0.0")
 
-print("Window size:", Window.size)
-
-LabelBase.register(DEFAULT_FONT, "./Michroma.ttf")
-
+LabelBase.register(DEFAULT_FONT, "./Audiowide.ttf")
 
 class Gauge(Widget):
     def __init__(
@@ -39,6 +37,7 @@ class Gauge(Widget):
         angle_range=270,
         label_map={},
         show_digital_value=True,
+        redline_from=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -50,8 +49,10 @@ class Gauge(Widget):
         self.angle_range = angle_range
         self.label_map = label_map
         self.show_title = show_digital_value
+        self.redline_from = redline_from
         self.needle_angle = 180
         self.current_angle = 180
+        self.value = 0
 
         with self.canvas:
             self.draw_gauge()
@@ -140,6 +141,24 @@ class Gauge(Widget):
             )
         )
 
+        if self.redline_from and self.redline_from > 0 and self.redline_from < self.max_value:
+            start = self._angle_for_value(self.redline_from)
+            end   = self._angle_for_value(self.max_value)
+            # Ensure start < end for Kivy's CCW arc
+            if start > end:
+                start, end = end, start
+            Color(1, 0, 0, .5)
+            # Slightly inside the outer edge so it looks clean
+            Line(circle=(center_x, center_y, radius * 0.98, start, end),
+                width=10, cap='round')
+            
+    def _angle_for_value(self, v):
+        # Convert a value in [0, max_value] to screen angle (degrees),
+        # matching your needle orientation (0° to the right, CCW positive; your dial spans 'angle_range').
+        v = max(0, min(v, self.max_value))
+        # this mirrors your update_value() math:
+        return ( (-self.angle_range / 2.0) + (v / float(self.max_value)) * self.angle_range )
+
     def init_needle(self, *args):
         self.center_x = self.x + self.width / 2
         self.center_y = self.y + self.height / 2
@@ -154,6 +173,7 @@ class Gauge(Widget):
 
     def update_value(self, value, smooth=True, update_label=True):
         clamped = max(0, min(value, self.max_value))
+        self.value = clamped
         angle = -( (-self.angle_range / 2) + ((clamped / self.max_value) * self.angle_range) )
         if smooth:
             self.needle_angle = angle
@@ -163,6 +183,11 @@ class Gauge(Widget):
 
         if update_label:
             self.value_label.text = f"{int(clamped)}"
+
+            if self.redline_from and self.value > self.redline_from:
+                self.value_label.color = (1, 0, 0, 1)
+            else:
+                self.value_label.color = (1, 1, 1, 1)
 
         self.value_label.center = self.center
 
@@ -174,18 +199,18 @@ class Gauge(Widget):
         if hasattr(self, "rot"):
             self.rot.angle = self.current_angle
 
-
 class CenterInfo(Widget):
     """
-    A small 'card' in the middle to show engine stats.
-    Use set_values(...) to update from your data source.
+    A center 'card' showing engine stats.
+    Top: compact grid (AIR / ENGINE / OIL)
+    Bottom: BIG readouts that expand to fill remaining space (BOOST / LAMBDA)
     """
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
         # initial size and position (will auto-center on window resize)
         self.size = (450, 600)
-        self._center_vert = (720 / 2) - (self.size[1] / 2)  # y from bottom where the card sits
+        self._center_vert = (720 / 2) - (self.size[1] / 2)
         self._reposition()
 
         # background card
@@ -193,20 +218,29 @@ class CenterInfo(Widget):
             Color(0.0118, 0.3373, 0.9882, 0.5)
             self.bg = RoundedRectangle(pos=self.pos, size=self.size, radius=[20])
             Color(1, 1, 1, 0.15)
-            # outline
             self.border = Line(rounded_rectangle=[self.x, self.y, self.width, self.height, 20], width=1)
 
-        # layout & labels
-        self.grid = GridLayout(
-            cols=2,
-            rows=4,
-            padding=[20, 18, 20, 18],
-            spacing=10,
+        # ---- layouts ----
+        # container that stretches over the whole card
+        self.vbox = BoxLayout(
+            orientation="vertical",
             size_hint=(None, None),
             size=self.size,
             pos=self.pos,
+            padding=[20, 18, 20, 18],
+            spacing=12,
         )
-        self.add_widget(self.grid)
+        self.add_widget(self.vbox)
+
+        # TOP: compact grid (fixed height)
+        self.grid = GridLayout(
+            cols=2,
+            rows=3,  # only the compact rows up here
+            size_hint=(1, None),
+            height=160,
+            spacing=10,
+        )
+        self.vbox.add_widget(self.grid)
 
         def add_row(label_text):
             name = Label(text=f"[b]{label_text}[/b]",
@@ -223,11 +257,41 @@ class CenterInfo(Widget):
             val.bind(size=val.setter("text_size"))
             self.grid.add_widget(name)
             self.grid.add_widget(val)
-            return val
+            return name, val
 
         self.lbl_iat = add_row("AIR")
         self.lbl_clt = add_row("ENGINE")
         self.lbl_oilp = add_row("OIL")
+
+        # BOTTOM: BIG readouts (fills remaining vertical space)
+        self.big = GridLayout(
+            rows=2,
+            size_hint=(1, 1),   # take all remaining space
+            spacing=12,
+        )
+        self.vbox.add_widget(self.big)
+
+        # BOOST big tile
+        self.boost_box = BoxLayout(orientation="vertical", padding=[10, 10, 10, 10])
+        self.big.add_widget(self.boost_box)
+        self.big_boost_title = Label(text="[b]BOOST[/b]", markup=True, font_size="18sp",
+                                     halign="center", valign="middle", size_hint=(1, None), height=30)
+        self.boost_box.add_widget(self.big_boost_title)
+        self.big_boost_value = Label(text="0.00", font_size="64sp", bold=True,
+                                     halign="center", valign="middle")
+        self.big_boost_value.bind(size=self.big_boost_value.setter("text_size"))
+        self.boost_box.add_widget(self.big_boost_value)
+
+        # LAMBDA big tile
+        self.lambda_box = BoxLayout(orientation="vertical", padding=[10, 10, 10, 10])
+        self.big.add_widget(self.lambda_box)
+        self.big_lambda_title = Label(text="[b]LAMBDA[/b]", markup=True, font_size="18sp",
+                                      halign="center", valign="middle", size_hint=(1, None), height=30)
+        self.lambda_box.add_widget(self.big_lambda_title)
+        self.big_lambda_value = Label(text="1.00", font_size="64sp", bold=True,
+                                      halign="center", valign="middle")
+        self.big_lambda_value.bind(size=self.big_lambda_value.setter("text_size"))
+        self.lambda_box.add_widget(self.big_lambda_value)
 
         # keep visuals in place on size/pos changes
         self.bind(pos=self._sync_graphics, size=self._sync_graphics)
@@ -238,21 +302,52 @@ class CenterInfo(Widget):
         self.pos = ((Window.width - self.width) / 2, self._center_vert)
 
     def _sync_graphics(self, *_):
-        # move background + outline + grid with widget
+        # move background + outline with widget
         self.bg.pos = self.pos
         self.bg.size = self.size
         self.border.rounded_rectangle = [self.x, self.y, self.width, self.height, 20]
-        self.grid.pos = self.pos
-        self.grid.size = self.size
+        # sync the layout container
+        self.vbox.pos = self.pos
+        self.vbox.size = self.size
 
-    def set_values(self, intake_c=None, water_c=None, oil_press_bar=None, oil_temp_c=None):
+    def set_values(self, intake_c=None, water_c=None, oil_press_bar=None,
+                   lambda_val=None, boost_bar=None):
+        # compact rows
         if intake_c is not None:
-            self.lbl_iat.text = f"{int(round(intake_c))} °C"
+            self.lbl_iat[1].text = f"{int(round(intake_c))} °C"
+            if intake_c > 50:
+                self.lbl_iat[0].color = (1, 0, 0, 1)
+                self.lbl_iat[1].color = (1, 0, 0, 1)
+            else:
+                self.lbl_iat[0].color = (1, 1, 1, 1)
+                self.lbl_iat[1].color = (1, 1, 1, 1)
+
         if water_c is not None:
-            self.lbl_clt.text = f"{int(round(water_c))} °C"
+            self.lbl_clt[1].text = f"{int(round(water_c))} °C"
+
         if oil_press_bar is not None:
-            # show one decimal for pressure
-            self.lbl_oilp.text = f"{oil_press_bar:.1f} bar"
+            self.lbl_oilp[1].text = f"{oil_press_bar:.1f} bar"
+
+        # BIG tiles
+        if boost_bar is not None:
+            self.big_boost_value.text = f"{boost_bar:.2f}"
+            # optional color hint >1.0 bar
+            if boost_bar >= 1.0:
+                self.big_boost_value.color = (1, 0, 0, 1)
+                self.big_boost_title.color = (1, 0, 0, 1)
+            else:
+                self.big_boost_value.color = (1, 1, 1, 1)
+                self.big_boost_title.color = (1, 1, 1, 1)
+
+        if lambda_val is not None:
+            self.big_lambda_value.text = f"{lambda_val:.2f}"
+            # optional color hint for rich/lean
+            if lambda_val < 0.85 or lambda_val > 1.15:
+                self.big_lambda_value.color = (1, 0, 0, 1)
+                self.big_lambda_title.color = (1, 0, 0, 1)
+            else:
+                self.big_lambda_value.color = (1, 1, 1, 1)
+                self.big_lambda_title.color = (1, 1, 1, 1)
 
 class Dashboard(Widget):
     def __init__(self, **kwargs):
@@ -277,6 +372,7 @@ class Dashboard(Widget):
             size=(600, 600),
             pos=(1220, 60),
             ticks=9,
+            redline_from=5500,
             label_map={
                 1000: "1",
                 2000: "2",
@@ -296,10 +392,12 @@ class Dashboard(Widget):
         self.add_widget(self.center_info)
 
         # demo smaller window while developing
-        Window.size = (1920 / 2, 720 / 2)
-
-        # Demo data feed (replace with your real sensors and call set_values)
-        Clock.schedule_interval(self.simulate_data, 1)
+        if PROD:
+            pass
+        else:
+            Window.size = (1920 / 2, 720 / 2)
+            Clock.schedule_once(lambda x: Clock.schedule_interval(self.simulate_data, 1), 3)
+        
 
     def simulate_data(self, dt):
         speed = random.uniform(0, 250)
@@ -308,17 +406,20 @@ class Dashboard(Widget):
         # Simulated engine stats
         intake_c = random.uniform(25, 65)
         water_c = random.uniform(70, 105)
-        oil_temp_c = random.uniform(70, 120)
         oil_press_bar = random.uniform(1.5, 5.0)
+        lambda_val = random.uniform(0.8, 1.2)
+        boost_bar = random.uniform(0.0, 1.5)  # demo boost
 
         self.speed_gauge.update_value(speed)
         self.rpm_gauge.update_value(rpm)
         self.center_info.set_values(
             intake_c=intake_c,
             water_c=water_c,
-            oil_temp_c=oil_temp_c,
             oil_press_bar=oil_press_bar,
+            lambda_val=lambda_val,
+            boost_bar=boost_bar,
         )
+
 
 
 class CarClusterApp(App):
