@@ -133,6 +133,10 @@ class ShiftCenterBanner(Widget):
         self._label.halign = "center"
         self._label.valign = "middle"
 
+        print(self._label.center, self._rect.pos, self._rect.size)
+
+        self._label.y -= self._rect.size[1] * 0.02
+
     # --- visibility & blinking ---
 
     def _apply_visible(self, show: bool):
@@ -643,8 +647,6 @@ class Dashboard(Widget):
 
         self.shift_overlay = ShiftCenterBanner(shift_rpm=6000, blink_hz=5)
         self.add_widget(self.shift_overlay)
-
-        Clock.schedule_once(lambda *_: self.shift_overlay.demo_flash(1.0), 0.5)
 
     def set_triggers(self):
         Window.bind(on_key_down=self.on_key_down)
