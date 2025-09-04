@@ -113,10 +113,9 @@ PARSERS = {
     0x14080608: parse_0x14080608,
 }
 
-
-def main(interface="can0", bustype="socketcan"):
+def main(interface='slcan', channel='/dev/tty.usbmodemXXXX'):
     print("Starting FTCAN 2.0 listener for FT450...")
-    bus = can.interface.Bus(channel=interface, bustype=bustype)
+    bus = can.Bus(interface=interface, channel=channel)
 
     try:
         while True:
