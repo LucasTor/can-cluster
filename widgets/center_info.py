@@ -101,7 +101,6 @@ class CenterInfo(Widget):
             text="[b]BOOST[/b]",
             markup=True,
             font_size="44sp",
-            padding=[0, 0, 0, 32],
             halign="center",
             valign="middle",
             size_hint=(1, None),
@@ -109,7 +108,7 @@ class CenterInfo(Widget):
         )
         self.boost_box.add_widget(self.big_boost_title)
         self.big_boost_value = Label(
-            text="0.00", font_size="160sp", bold=True, halign="center", valign="middle"
+            text="0.00", font_size="160sp", bold=True, halign="center", valign="middle" , padding=[0, 0, 0, 24]
         )
         self.big_boost_value.bind(size=self.big_boost_value.setter("text_size"))
         self.boost_box.add_widget(self.big_boost_value)
@@ -121,7 +120,6 @@ class CenterInfo(Widget):
             text="[b]LAMBDA[/b]",
             markup=True,
             font_size="44sp",
-            padding=[0, 0, 0, 32],
             halign="center",
             valign="middle",
             size_hint=(1, None),
@@ -129,7 +127,7 @@ class CenterInfo(Widget):
         )
         self.lambda_box.add_widget(self.big_lambda_title)
         self.big_lambda_value = Label(
-            text="1.00", font_size="160sp", bold=True, halign="center", valign="middle"
+            text="1.00", font_size="160sp", bold=True, halign="center", valign="middle", padding=[0, 0, 0, 24]
         )
         self.big_lambda_value.bind(size=self.big_lambda_value.setter("text_size"))
         self.lambda_box.add_widget(self.big_lambda_value)
