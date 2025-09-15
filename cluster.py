@@ -33,7 +33,7 @@ kivy.require("2.0.0")
 
 
 # LabelBase.register(DEFAULT_FONT, "fonts/consolas-bold.ttf")
-LabelBase.register(DEFAULT_FONT, "fonts/ShareTechMono-Regular.ttf")
+LabelBase.register(DEFAULT_FONT, "fonts/Compagnon-Bold.otf")
 from kivy.graphics import Color
 from kivy.graphics import Color, RoundedRectangle
 
