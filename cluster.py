@@ -8,7 +8,6 @@ if DEV:
 from kivy.config import Config
 Config.set("graphics", "width", "1920")
 Config.set("graphics", "height", "720")
-Config.set('modules', 'show_fps', '1')
 
 import os
 import kivy
@@ -24,6 +23,7 @@ from kivy.core.window import Window
 from kivy.core.text import LabelBase, DEFAULT_FONT
 from kivy.properties import NumericProperty
 
+Window.show_fps = True
 
 from widgets import CenterInfo, Gauge
 
