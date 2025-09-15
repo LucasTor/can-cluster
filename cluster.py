@@ -8,6 +8,7 @@ if DEV:
 from kivy.config import Config
 Config.set("graphics", "width", "1920")
 Config.set("graphics", "height", "720")
+Config.set('modules', 'show_fps', '1')
 
 import os
 import kivy
