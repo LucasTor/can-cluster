@@ -61,7 +61,7 @@ class CenterInfo(Widget):
             name = Label(
                 text=f"[b]{label_text}[/b]",
                 markup=True,
-                font_size="20sp",
+                font_size="40sp",
                 halign="left",
                 valign="middle",
                 size_hint=(1, None),
@@ -69,7 +69,7 @@ class CenterInfo(Widget):
             )
             val = Label(
                 text="—",
-                font_size="20sp",
+                font_size="40sp",
                 bold=True,
                 halign="right",
                 valign="middle",
@@ -100,7 +100,7 @@ class CenterInfo(Widget):
         self.big_boost_title = Label(
             text="[b]BOOST[/b]",
             markup=True,
-            font_size="22sp",
+            font_size="44sp",
             padding=[0, 0, 0, 32],
             halign="center",
             valign="middle",
@@ -109,7 +109,7 @@ class CenterInfo(Widget):
         )
         self.boost_box.add_widget(self.big_boost_title)
         self.big_boost_value = Label(
-            text="0.00", font_size="80sp", bold=True, halign="center", valign="middle"
+            text="0.00", font_size="160sp", bold=True, halign="center", valign="middle"
         )
         self.big_boost_value.bind(size=self.big_boost_value.setter("text_size"))
         self.boost_box.add_widget(self.big_boost_value)
@@ -120,7 +120,7 @@ class CenterInfo(Widget):
         self.big_lambda_title = Label(
             text="[b]LAMBDA[/b]",
             markup=True,
-            font_size="22sp",
+            font_size="44sp",
             padding=[0, 0, 0, 32],
             halign="center",
             valign="middle",
@@ -129,7 +129,7 @@ class CenterInfo(Widget):
         )
         self.lambda_box.add_widget(self.big_lambda_title)
         self.big_lambda_value = Label(
-            text="1.00", font_size="80sp", bold=True, halign="center", valign="middle"
+            text="1.00", font_size="160sp", bold=True, halign="center", valign="middle"
         )
         self.big_lambda_value.bind(size=self.big_lambda_value.setter("text_size"))
         self.lambda_box.add_widget(self.big_lambda_value)
