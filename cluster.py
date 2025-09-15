@@ -1,46 +1,30 @@
-import os
+from kivy.config import Config
+Config.set("graphics", "width", "1920")
+Config.set("graphics", "height", "720")
+
 import kivy
 from kivy.app import App
 from kivy.uix.widget import Widget
 from kivy.graphics import (
     Color,
-    Ellipse,
-    Line,
-    Rotate,
-    PushMatrix,
-    PopMatrix,
     RoundedRectangle,
-    BoxShadow,
-    Rectangle
 )
 from kivy.uix.label import Label
 from kivy.clock import Clock
 from kivy.core.window import Window
 from kivy.core.text import LabelBase, DEFAULT_FONT
-from kivy.config import Config
-from kivy.uix.gridlayout import GridLayout
-from kivy.animation import Animation
-from kivy.uix.boxlayout import BoxLayout
 from kivy.properties import NumericProperty
 
 from widgets import CenterInfo, Gauge
 
-import math
 import random
-
-PROD = bool(os.environ.get("PROD", False))
-
-if not PROD:
-    Config.set("graphics", "fullscreen", "0")
-    Config.set("graphics", "width", "1920")
-    Config.set("graphics", "height", "720")
 
 kivy.require("2.0.0")
 
 # LabelBase.register(DEFAULT_FONT, "fonts/consolas-bold.ttf")
 LabelBase.register(DEFAULT_FONT, "fonts/ShareTechMono-Regular.ttf")
-from kivy.graphics import Color, Ellipse
-from kivy.graphics import Color, RoundedRectangle, Line
+from kivy.graphics import Color
+from kivy.graphics import Color, RoundedRectangle
 
 
 class ShiftCenterBanner(Widget):
@@ -338,5 +322,6 @@ class CarClusterApp(App):
 
 
 if __name__ == "__main__":
+    print(Window.size)
     CarClusterApp().run()
     print(Window.size)
