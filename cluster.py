@@ -238,13 +238,13 @@ class Dashboard(Widget):
         self.add_widget(self.rpm_gauge)
         self.add_widget(self.center_info)
 
-        # demo smaller window while developing
-        if PROD:
-            pass
-        else:
-            Window.size = (1920 / 2, 720 / 2)
+        # # demo smaller window while developing
+        # if PROD:
+        #     pass
+        # else:
+            # Window.size = (1920 / 2, 720 / 2)
             # Clock.schedule_once(lambda x: Clock.schedule_interval(self.simulate_data, 1), 3)
-            Clock.schedule_once(lambda x: self.set_triggers(), 3)
+        Clock.schedule_once(lambda x: self.set_triggers(), 3)
 
         self.shift_overlay = ShiftCenterBanner(shift_rpm=6000, blink_hz=5)
         self.add_widget(self.shift_overlay)
