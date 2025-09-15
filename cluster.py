@@ -1,7 +1,15 @@
+import os
+DEV = os.environ.get('DEV', True)
+
+if DEV:
+    os.environ['KIVY_METRICS_DENSITY'] = '1'  # Default is usually 1, try 0.5 if UI is too large
+    os.environ['KIVY_DPI'] = '96'             # Standard DPI
+
 from kivy.config import Config
 Config.set("graphics", "width", "1920")
 Config.set("graphics", "height", "720")
 
+import os
 import kivy
 from kivy.app import App
 from kivy.uix.widget import Widget
@@ -15,11 +23,13 @@ from kivy.core.window import Window
 from kivy.core.text import LabelBase, DEFAULT_FONT
 from kivy.properties import NumericProperty
 
+
 from widgets import CenterInfo, Gauge
 
 import random
 
 kivy.require("2.0.0")
+
 
 # LabelBase.register(DEFAULT_FONT, "fonts/consolas-bold.ttf")
 LabelBase.register(DEFAULT_FONT, "fonts/ShareTechMono-Regular.ttf")
@@ -237,12 +247,8 @@ class Dashboard(Widget):
         self.add_widget(self.speed_gauge)
         self.add_widget(self.rpm_gauge)
         self.add_widget(self.center_info)
-
-        # # demo smaller window while developing
-        # if PROD:
-        #     pass
-        # else:
-            # Window.size = (1920 / 2, 720 / 2)
+        if DEV:
+            Window.size = (1920 / 2, 720 / 2)
             # Clock.schedule_once(lambda x: Clock.schedule_interval(self.simulate_data, 1), 3)
         Clock.schedule_once(lambda x: self.set_triggers(), 3)
 

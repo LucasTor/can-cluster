@@ -50,7 +50,7 @@ class Gauge(Widget):
 
         self.value_label = Label(
             text="0",
-            font_size="48sp",
+            font_size="96sp",
             bold=True,
             pos=(self.center_x, self.center_y),
             size_hint=(None, None),
@@ -119,7 +119,7 @@ class Gauge(Widget):
                 Label(
                     text=f"[b]{str(label)}[/b]",
                     pos=(label_x, label_y),
-                    font_size="24sp",
+                    font_size="44sp",
                     markup=True,
                     halign="center",
                     valign="middle",
@@ -131,7 +131,7 @@ class Gauge(Widget):
                 text=self.title,
                 size=(self.width, 30),
                 pos=(self.x, self.y + self.size[0] * 0.1),
-                font_size="32sp",
+                font_size="64sp",
                 halign="center",
                 valign="middle",
             )
@@ -142,7 +142,7 @@ class Gauge(Widget):
                 text=self.subtitle,
                 size=(self.width, 30),
                 pos=(self.x, self.y + self.size[0] * 0.04),
-                font_size="12sp",
+                font_size="24sp",
                 halign="center",
                 valign="middle",
             )
