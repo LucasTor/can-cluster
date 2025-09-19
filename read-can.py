@@ -69,14 +69,13 @@ PARSERS = {
     MSG_WHEEL_SPEEDS:    parse_0x14080603,
 }
 
-def main(interface="socketcan", channel="can0", print_fast=False):
+def read_can(interface="socketcan", channel="can0", print_fast=False, data = {}):
     print("Starting FTCAN 2.0 simplified listener on", channel)
 
     # Filters: only the simplified frames we care about (extended IDs)
     filters = [{"can_id": mid, "can_mask": 0x1FFFFFFF, "extended": True} for mid in PARSERS]
     bus = can.Bus(interface=interface, channel=channel, receive_own_messages=False, can_filters=filters)
 
-    data = {}
     # Optional rolling buffers if you want "fast" prints without flooding
     last_lines = deque(maxlen=1)
 
@@ -117,6 +116,14 @@ def main(interface="socketcan", channel="can0", print_fast=False):
     finally:
         bus.shutdown()
 
+from concurrent.futures import ThreadPoolExecutor
 if __name__ == "__main__":
-    # Set print_fast=True if you want a terse RPM/speed line streaming.
-    main(print_fast=True)
+    data = {}
+
+    def print_can(recv):
+        print('RPM:', recv.get('rpm', 0))
+
+    with ThreadPoolExecutor(max_workers=2, thread_name_prefix="ftcan") as ex:
+        fut_reader   = ex.submit(read_can, data=data)
+        fut_consumer = ex.submit(print_can, recv=data)
+
