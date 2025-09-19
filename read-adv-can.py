@@ -1,204 +1,130 @@
 #!/usr/bin/env python3
 import can
-import sys
-import time
-from datetime import datetime
+from collections import defaultdict
+from time import monotonic
 
-# ---------- Basic FuelTech ID → (name, unit, scale, signed_24bit) ----------
-# Add/extend as you like. Unknown IDs will be printed with raw value.
-FT_IDS = {
-    0x0006: ("Brake Pressure", "bar", 0.001, False),
-    0x0014: ("MAP",           "bar", 0.01,  False),
-    0x007C: ("Engine Temp",   "°C",  0.1,   True),
-    0x007E: ("Oil Temp",      "°C",  0.1,   True),
-    0x0080: ("Coolant Press", "bar", 0.01,  False),  # example placeholder
-    0x0084: ("RPM",           "rpm", 1.0,   False),
-    0x00EA: ("Lambda 1",      "",    0.001, False),
-    0x00EC: ("Lambda 2",      "",    0.001, False),
-    0x00F8: ("Fuel Temp",     "°C",  0.1,   True),
-    0x00FE: ("Oil Press",     "bar", 0.01,  False),
-    0x0138: ("Battery Temp",  "°C",  0.1,   True),
-    0x013A: ("IAT",           "°C",  0.1,   True),
-    0x013C: ("Gear Calc",     "",    1.0,   False),
-    0x013E: ("TPS",           "%",   0.1,   False),
-    0x0140: ("Ign Advance",   "°",   0.1,   True),
-    0x0142: ("Fuel PW",       "ms",  0.01,  False),
-    0x0144: ("Battery Volt",  "V",   0.01,  False),
-    0x0146: ("Wheel Speed",   "km/h",0.1,   False),
-    0x0372: ("Traction %",    "%",   0.1,   True),
-    0x0374: ("Slip %",        "%",   0.1,   True),
-    0x0376: ("Boost Target",  "bar", 0.01,  False),
-    0x0378: ("Boost Duty",    "%",   0.1,   False),
-    0x037A: ("Launch RPM",    "rpm", 1.0,   False),
-    0x037C: ("Cut Level",     "%",   0.1,   False),
-    0x037E: ("Ign Trim",      "°",   0.1,   True),
+# -------- Config --------
+CHANNEL = "can0"
+BITRATE = None  # leave None if your can0 is already up (e.g., with ip link set can0 up type can bitrate 500000)
+
+# FuelTech FTCAN 2.0 constants (from manual)
+# DataIDs we care about (MeasureID bit0==0 for value, bit0==1 would be "status")
+DATAID_RPM = 0x0084
+DATAID_WSPD_FL = 0x000C
+DATAID_WSPD_FR = 0x000D
+DATAID_WSPD_RL = 0x000E
+DATAID_WSPD_RR = 0x000F
+
+# Simplified broadcast IDs (FT600/550/450 column)
+SIMPL_RPM_ID = 0x14080602  # bytes: [ExhO2_H,ExhO2_L, RPM_H, RPM_L, OilT_H, OilT_L, Pit_H, Pit_L]
+SIMPL_WSPD_ID = 0x14080603 # [FR_H,FR_L, FL_H,FL_L, RR_H,RR_L, RL_H,RL_L]
+
+# Your segmented stream IDs seen in the dump (match 0x14081?FF)
+SEGMENTED_BASE_IDS = {0x140810FF, 0x140811FF, 0x140812FF, 0x140813FF}
+
+# -------- State --------
+last = {
+    "rpm": None,
+    "fl": None, "fr": None, "rl": None, "rr": None
 }
 
-# Utility: sign-extend a 24-bit little-endian value if needed
-def decode_24bit_le(b0, b1, b2, signed=False):
-    val = (b0 | (b1 << 8) | (b2 << 16))
-    if signed:
-        # 24-bit sign bit is bit 23
-        if val & 0x800000:
-            val = val - 0x1000000
-    return val
+# segmented assembly buffer per arbitration_id
+seg_buf = defaultdict(bytearray)
+seg_last_seq = {}
 
-def fmt_id_name(data_id):
-    meta = FT_IDS.get(data_id)
-    if not meta:
-        return f"0x{data_id:04X}", "", 1.0, False
-    name, unit, scale, signed = meta
-    return name, unit, scale, signed
+def maybe_print():
+    # Print only when we actually have something new
+    print(f"RPM={last['rpm'] or '-'}  WSPD[km/h] FL={last['fl'] or '-'} FR={last['fr'] or '-'} RL={last['rl'] or '-'} RR={last['rr'] or '-'}")
 
-class SegmentedAssembler:
-    """
-    Assembles FTCAN 2.0 segmented payloads for a given arbitration ID.
-    Segment format:
-      seg[0]: [idx=0] [size_lo] [size_hi] [payload...]
-      seg[>0]: [idx] [payload...]
-    """
-    def __init__(self):
-        # key: arbitration_id -> state
-        self.states = {}
+def parse_measure_stream(b: bytes):
+    """Scan a byte stream of [ID_hi,ID_lo,VAL_hi,VAL_lo]* and update last[]"""
+    # Walk in 4-byte chunks, but be robust to odd lengths
+    n = len(b) // 4
+    for i in range(n):
+        off = i * 4
+        mid = (b[off] << 8) | b[off+1]
+        val = (b[off+2] << 8) | b[off+3]
+        if mid & 0x1:  # status, not a value
+            continue
+        data_id = mid >> 1
 
-    def reset(self, key):
-        if key in self.states:
-            del self.states[key]
+        if data_id == DATAID_RPM:
+            # RPM scale = 1 rpm per count (example shows 0x07D0 = 2000 rpm)
+            last['rpm'] = val
+        elif data_id == DATAID_WSPD_FL:
+            last['fl'] = val   # km/h, scale 1
+        elif data_id == DATAID_WSPD_FR:
+            last['fr'] = val
+        elif data_id == DATAID_WSPD_RL:
+            last['rl'] = val
+        elif data_id == DATAID_WSPD_RR:
+            last['rr'] = val
 
-    def push(self, arb_id, data):
-        """
-        Feed one 8-byte segment payload.
-        Returns: bytes(payload) when complete, else None.
-        """
-        if not data:
-            return None
-        idx = data[0]
-        state = self.states.get(arb_id)
+def handle_segmented(msg: can.Message):
+    """Assemble FTCAN segmented blocks and parse as data arrives.
+       Layout: first data byte is the sequence index (0x00..0x10); bytes 1..7 are data."""
+    if not msg.data:
+        return
+    seq = msg.data[0]
+    payload = bytes(msg.data[1:])  # up to 7 bytes per frame
 
-        if idx == 0:
-            if len(data) < 3:
-                return None
-            total = data[1] | (data[2] << 8)
-            buf = bytearray()
-            buf.extend(data[3:])
-            self.states[arb_id] = {
-                "expected_len": total,
-                "next_idx": 1,
-                "buf": buf,
-                "last_ts": time.time(),
-            }
-            # completion check (can happen if tiny payload)
-            st = self.states[arb_id]
-            if len(st["buf"]) >= st["expected_len"]:
-                payload = bytes(st["buf"][:st["expected_len"]])
-                self.reset(arb_id)
-                return payload
-            return None
-        else:
-            # Ignore out-of-order starts
-            if state is None:
-                return None
-            # Optionally enforce monotonic idx: if idx != state["next_idx"], you could drop.
-            # We'll be tolerant and just append:
-            state["buf"].extend(data[1:])
-            state["next_idx"] = idx + 1
-            state["last_ts"] = time.time()
-            if len(state["buf"]) >= state["expected_len"]:
-                payload = bytes(state["buf"][:state["expected_len"]])
-                self.reset(arb_id)
-                return payload
-            return None
+    buf = seg_buf[msg.arbitration_id]
+    # Simple strategy: reset at seq==0 or if sequence jumps backwards
+    if seq == 0 or (msg.arbitration_id in seg_last_seq and seq <= seg_last_seq[msg.arbitration_id]):
+        buf.clear()
+    seg_last_seq[msg.arbitration_id] = seq
 
-def parse_items(payload_bytes):
-    """
-    Parse 5-byte items: [DataID (LE16)] + [Value (LE24)].
-    Returns list of dicts.
-    """
-    out = []
-    i = 0
-    n = len(payload_bytes)
-    while i + 5 <= n:
-        data_id = payload_bytes[i] | (payload_bytes[i+1] << 8)
-        raw0, raw1, raw2 = payload_bytes[i+2], payload_bytes[i+3], payload_bytes[i+4]
-        name, unit, scale, signed = fmt_id_name(data_id)
-        raw_val = decode_24bit_le(raw0, raw1, raw2, signed=signed)
-        scaled = raw_val * scale
-        out.append({
-            "data_id": data_id,
-            "name": name,
-            "raw": raw_val,
-            "value": scaled,
-            "unit": unit
-        })
-        i += 5
-    # Note: leftover bytes (<5) are ignored (padding)
-    return out
+    buf.extend(payload)
+
+    # As soon as we have at least 4 bytes, try to parse newly added complete tuples
+    # Parse only the multiple of 4 portion to avoid cutting a pair in half
+    usable_len = (len(buf) // 4) * 4
+    if usable_len:
+        parse_measure_stream(buf[:usable_len])
+        # Keep any remainder (0..3 bytes) in the buffer for next frame
+        remainder = buf[usable_len:]
+        buf.clear()
+        buf.extend(remainder)
+        maybe_print()
+
+def handle_simplified(msg: can.Message):
+    d = msg.data
+    if msg.arbitration_id == SIMPL_RPM_ID and len(d) >= 4:
+        last['rpm'] = (d[2] << 8) | d[3]
+        maybe_print()
+    elif msg.arbitration_id == SIMPL_WSPD_ID and len(d) == 8:
+        last['fr'] = (d[0] << 8) | d[1]  # FR
+        last['fl'] = (d[2] << 8) | d[3]  # FL
+        last['rr'] = (d[4] << 8) | d[5]  # RR
+        last['rl'] = (d[6] << 8) | d[7]  # RL
+        maybe_print()
 
 def main():
-    # The two segmented arbitration IDs we care about
-    IDS = {0x140812FF, 0x140813FF}
+    bus = can.interface.Bus(bustype="socketcan", channel=CHANNEL, bitrate=BITRATE)
+    # Hardware filtering helps latency/CPU
+    filters = [
+        # segmented pages you’re seeing
+        *[{"can_id": i, "can_mask": 0x1FFFFFFF, "extended": True} for i in SEGMENTED_BASE_IDS],
+        # simplified (fast) frames, if present
+        {"can_id": SIMPL_RPM_ID, "can_mask": 0x1FFFFFFF, "extended": True},
+        {"can_id": SIMPL_WSPD_ID, "can_mask": 0x1FFFFFFF, "extended": True},
+    ]
+    bus.set_filters(filters)
 
-    try:
-        bus = can.interface.Bus(bustype="socketcan", channel="can0")
-    except Exception as e:
-        print(f"Error opening can0: {e}", file=sys.stderr)
-        sys.exit(1)
-
-    # Filters: only extended IDs 0x140812FF and 0x140813FF
-    try:
-        bus.set_filters([
-            {"can_id": 0x140812FF, "can_mask": 0x1FFFFFFF, "extended": True},
-            {"can_id": 0x140813FF, "can_mask": 0x1FFFFFFF, "extended": True},
-        ])
-    except Exception:
-        # Some backends ignore set_filters—safe to continue.
-        pass
-
-    assembler = SegmentedAssembler()
-
-    print("Listening on can0 for 0x140812FF and 0x140813FF (segmented FTCAN 2.0)…")
-    print("Press Ctrl+C to stop.\n")
-
+    print("Listening on can0 for FTCAN 2.0… (Ctrl+C to stop)")
     try:
         while True:
             msg = bus.recv(timeout=1.0)
             if msg is None:
                 continue
-            if not msg.is_extended_id:
-                continue
-            arb_id = msg.arbitration_id
-            if arb_id not in IDS:
-                continue
-            data = bytes(msg.data)
-
-            # Feed segment assembler
-            payload = assembler.push(arb_id, data)
-            if payload is None:
-                continue
-
-            # Completed payload → decode items
-            items = parse_items(payload)
-            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-            print(f"\n[{ts}] Completed {len(payload)} bytes from 0x{arb_id:08X} → {len(items)} item(s)")
-
-            for it in items:
-                name = it["name"]
-                if name.startswith("0x"):  # unknown ID
-                    print(f"  DataID {name}: raw={it['raw']}")
-                else:
-                    unit = it["unit"]
-                    if unit:
-                        print(f"  {name:<16} = {it['value']:.3f} {unit}  (raw {it['raw']})")
-                    else:
-                        print(f"  {name:<16} = {it['value']:.3f}      (raw {it['raw']})")
-
+            # Extended IDs are expected here
+            if msg.arbitration_id in SEGMENTED_BASE_IDS:
+                handle_segmented(msg)
+            elif msg.arbitration_id in (SIMPL_RPM_ID, SIMPL_WSPD_ID):
+                handle_simplified(msg)
+            # else ignore
     except KeyboardInterrupt:
-        print("\nStopped.")
-    finally:
-        try:
-            bus.shutdown()
-        except Exception:
-            pass
+        pass
 
 if __name__ == "__main__":
     main()
