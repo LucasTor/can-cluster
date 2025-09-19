@@ -25,7 +25,7 @@ from kivy.properties import NumericProperty
 
 Window.show_fps = True
 
-from widgets import CenterInfo, Gauge
+from widgets import CenterInfo, Gauge, TurnIndicator
 
 import random
 
@@ -248,6 +248,18 @@ class Dashboard(Widget):
         self.add_widget(self.speed_gauge)
         self.add_widget(self.rpm_gauge)
         self.add_widget(self.center_info)
+
+        self.left_indicator = TurnIndicator(side='left', blink_hz=2, size=(100, 100), pos=(635, 560))
+        self.right_indicator = TurnIndicator(side='right', blink_hz=2, size=(100, 100), pos=(1185, 560))
+        self.add_widget(self.left_indicator)
+        self.add_widget(self.right_indicator)
+
+        self.right_indicator.set_active(True)
+        self.left_indicator.set_active(True)
+
+        # Optional: hazard state
+        self.hazard_on = False
+
         if DEV:
             Window.size = (1920 / 2, 720 / 2)
             # Clock.schedule_once(lambda x: Clock.schedule_interval(self.simulate_data, 1), 3)
@@ -259,6 +271,7 @@ class Dashboard(Widget):
         # with self.canvas:
         #     Color(0, 0, 0, .2)
         #     Rectangle(pos=(0, 0), size=(1920, 720))
+        
 
     def set_triggers(self):
         Window.bind(on_key_down=self.on_key_down)

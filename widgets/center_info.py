@@ -159,7 +159,7 @@ class CenterInfo(Widget):
     ):
         # compact rows
         if intake_c is not None:
-            self.lbl_iat[1].text = f"{int(round(intake_c))} °C"
+            self.lbl_iat[1].text = f"{int(round(intake_c))}°C"
             if intake_c > 50:
                 self.lbl_iat[0].color = (1, 0, 0, 1)
                 self.lbl_iat[1].color = (1, 0, 0, 1)
@@ -168,10 +168,10 @@ class CenterInfo(Widget):
                 self.lbl_iat[1].color = (1, 1, 1, 1)
 
         if water_c is not None:
-            self.lbl_clt[1].text = f"{int(round(water_c))} °C"
+            self.lbl_clt[1].text = f"{int(round(water_c))}°C"
 
         if oil_press_bar is not None:
-            self.lbl_oilp[1].text = f"{oil_press_bar:.1f} bar"
+            self.lbl_oilp[1].text = f"{oil_press_bar:.1f} BAR"
 
         # BIG tiles
         if boost_bar is not None:

@@ -113,13 +113,20 @@ PARSERS = {
     0x14080608: parse_0x14080608,
 }
 
-def main(interface='slcan', channel='/dev/tty.usbmodemXXXX'):
+def main(interface='socketcan', channel='can0'):
     print("Starting FTCAN 2.0 listener for FT450...")
     bus = can.Bus(interface=interface, channel=channel)
 
     try:
+        message = can.Message(arbitration_id=0x123, is_extended_id=False, data=[0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08])
+        try:
+            bus.send(message, timeout=0.2)
+            print(f"Message sent: {message}")
+        except can.CanOperationError as e:
+            print(f"Error sending message: {e}")
         while True:
             msg = bus.recv()
+            print(msg)
             if msg.arbitration_id in PARSERS:
                 parsed = PARSERS[msg.arbitration_id](msg.data)
                 print(
