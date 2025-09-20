@@ -6,6 +6,7 @@ if DEV:
     os.environ['KIVY_DPI'] = '96'             # Standard DPI
 
 from kivy.config import Config
+Config.set('graphics', 'show_cursor', '0')  # must be before Window import
 Config.set("graphics", "width", "1920")
 Config.set("graphics", "height", "720")
 
@@ -271,13 +272,17 @@ class Dashboard(Widget):
         # with self.canvas:
         #     Color(0, 0, 0, .2)
         #     Rectangle(pos=(0, 0), size=(1920, 720))
+
+    def update(self, data):
+        # return
+        self.rpm_gauge.update_value(data.get('rpm', 0))
         
 
     def set_triggers(self):
         Window.bind(on_key_down=self.on_key_down)
         Window.bind(on_key_up=self.on_key_up)
 
-        Clock.schedule_interval(self.update_gauges, 1 / 30)
+        # Clock.schedule_interval(self.update_gauges, 1 / 30)
 
     def simulate_data(self, dt):
         speed = random.uniform(0, 250)
@@ -336,12 +341,37 @@ class Dashboard(Widget):
             boost_bar=(self.rpm - 1000) / 7000 * 1.5,
         )
 
-class CarClusterApp(App):
-    def build(self):
-        return Dashboard()
+    
+def run_cluster(data):
+    try:
+        class CarClusterApp(App):
+            def __init__(self):
+                super().__init__()
+                Clock.schedule_interval(lambda x: print('RPM FROM CLUSTER', data.get('rpm', 0)), 1)
+                Clock.schedule_interval(self.update_values, 1/30)
 
+            def update_values(self, _):
+                if(self.dashboard):
+                    self.dashboard.update(data)
+
+            def build(self):
+                self.dashboard = Dashboard()
+                return self.dashboard
+
+        CarClusterApp().run()
+    except Exception as e:
+        print(e)
+        
 
 if __name__ == "__main__":
     print(Window.size)
+    data = {}
+    class CarClusterApp(App):
+        Clock.schedule_interval(lambda x: print(data.get('rpm', 0)), 1)
+
+        def build(self):
+            return Dashboard()
+
     CarClusterApp().run()
+    # CarClusterApp().run()
     print(Window.size)

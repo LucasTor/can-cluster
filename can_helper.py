@@ -125,7 +125,6 @@ if __name__ == "__main__":
         while True:
             print('RPM:', recv.get('rpm', 0))
             time.sleep(0.1)
-            
 
     with ThreadPoolExecutor(max_workers=2, thread_name_prefix="ftcan") as ex:
         fut_reader   = ex.submit(read_can, data=data)
