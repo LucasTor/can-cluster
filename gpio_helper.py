@@ -14,16 +14,19 @@ class Pin(Enum):
 
 def read_io(data = {}):
     print('READING IO')
-    for pin in Pin:
-        GPIO.setup(pin.value, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-
-    if not data.get('io'):
-        data['io'] = {}
-
-    while True:
+    try:
         for pin in Pin:
-            data['io'][pin.name.lower()] = GPIO.input(pin.value)
+            GPIO.setup(pin.value, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
-        print(data['io'])
+        if not data.get('io'):
+            data['io'] = {}
 
-        time.sleep(0.1)
+        while True:
+            for pin in Pin:
+                data['io'][pin.name.lower()] = GPIO.input(pin.value)
+
+            print(data['io'])
+
+            time.sleep(0.1)
+    except Exception as e:
+        print(e)
