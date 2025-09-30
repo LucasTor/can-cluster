@@ -14,6 +14,7 @@ class Pin(Enum):
 
 def read_io(data = {}):
     print('READING IO')
+    GPIO.setmode(GPIO.BCM)
     try:
         for pin in Pin:
             GPIO.setup(pin.value, GPIO.IN, pull_up_down=GPIO.PUD_UP)
