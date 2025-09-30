@@ -1,6 +1,6 @@
 import time
 from enum import Enum
-from gpiozero import DigitalInputDevice
+import RPi.GPIO as GPIO
 
 class Pin(Enum):
     RIGHT_INDICATOR = 5
@@ -15,14 +15,14 @@ class Pin(Enum):
 def read_io(data = {}):
     pins = {}
     for pin in Pin:
-        pins[pin.name] = DigitalInputDevice(pin.value, pull_up=True)
+        GPIO.setup(pin.value, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
     if not data.get('io'):
         data['io'] = {}
 
     while True:
-        for name, pin in pins.items():
-            data['io'][name.lower()] = pin.value
+        for pin in Pin:
+            data['io'][pin.name.lower()] = GPIO.input(pin.value)
 
         print(data['io'])
 
