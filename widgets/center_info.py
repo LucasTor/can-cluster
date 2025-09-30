@@ -50,9 +50,9 @@ class CenterInfo(Widget):
         # TOP: compact grid (fixed height)
         self.grid = GridLayout(
             cols=2,
-            rows=3,  # only the compact rows up here
+            rows=4,  # only the compact rows up here
             size_hint=(1, None),
-            height=160,
+            height=200,
             spacing=10,
         )
         self.vbox.add_widget(self.grid)
@@ -85,6 +85,7 @@ class CenterInfo(Widget):
         self.lbl_iat = add_row("AIR")
         self.lbl_clt = add_row("ENGINE")
         self.lbl_oilp = add_row("OIL")
+        self.lbl_oilp = add_row("FUEL")
 
         # BOTTOM: BIG readouts (fills remaining vertical space)
         self.big = GridLayout(

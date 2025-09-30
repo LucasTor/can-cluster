@@ -218,7 +218,7 @@ class Dashboard(Widget):
             max_value=240,
             unit="km/h",
             size=(600, 600),
-            pos=(100, 60),
+            pos=(60, 60),
             ticks=13,
             angle_range=270,
         )
@@ -229,7 +229,7 @@ class Dashboard(Widget):
             max_value=8000,
             unit="rpm",
             size=(600, 600),
-            pos=(1220, 60),
+            pos=(1260, 60),
             ticks=9,
             redline_from=5500,
             label_map={
