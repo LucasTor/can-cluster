@@ -13,7 +13,7 @@ class Pin(Enum):
     C = 21
 
 def read_io(data = {}):
-    pins = {}
+    print('READING IO')
     for pin in Pin:
         GPIO.setup(pin.value, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
