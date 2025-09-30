@@ -28,6 +28,6 @@ def read_io(data = {}):
 
             print(data['io'])
 
-            time.sleep(0.1)
+            time.sleep(1 / 30)
     except Exception as e:
         print(e)
