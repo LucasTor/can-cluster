@@ -3,14 +3,14 @@ from enum import Enum
 import RPi.GPIO as GPIO
 
 class Pin(Enum):
-    RIGHT_INDICATOR = 5
+    C = 5
     LEFT_INDICTOR = 6
     HEADLIGHTS = 13
     SOMETHING = 19
     OTHER_THING = 26
     A = 16
     B = 20
-    C = 21
+    RIGHT_INDICATOR = 21
 
 def read_io(data = {}):
     GPIO.setmode(GPIO.BCM)
