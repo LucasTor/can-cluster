@@ -72,8 +72,8 @@ class TurnIndicator(Widget):
         self._shaft.points = [*shaft_start, *shaft_far]
 
     def _set_color(self, on):
-        color_on = (0.1, 0.1, 0.1, 1)
-        color_off = (0.0, 1.0, 0.0, 1)
+        color_on = (0.0, 1.0, 0.0, 1)
+        color_off = (0.1, 0.1, 0.1, 1)
         self._col.rgba = color_on if on else color_off
 
     def set_active(self, on: bool):
