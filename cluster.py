@@ -255,9 +255,6 @@ class Dashboard(Widget):
         self.add_widget(self.left_indicator)
         self.add_widget(self.right_indicator)
 
-        self.right_indicator.set_active(True)
-        self.left_indicator.set_active(True)
-
         # Optional: hazard state
         self.hazard_on = False
 
@@ -285,6 +282,8 @@ class Dashboard(Widget):
             fuel_level=data.get('fuel_level', 0)
         )
 
+        self.right_indicator.set_active(data.get('io', {}).get('right_indicator'))
+        self.left_indicator.set_active(data.get('io', {}).get('left_indicator'))
 
 
     def set_triggers(self):
