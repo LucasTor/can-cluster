@@ -274,9 +274,18 @@ class Dashboard(Widget):
         #     Rectangle(pos=(0, 0), size=(1920, 720))
 
     def update(self, data):
-        # return
         self.rpm_gauge.update_value(data.get('rpm', 0))
-        
+        self.speed_gauge.update_value(data.get('wheel_speed_fl_kmh', 0))
+        self.center_info.set_values(
+            intake_c=data.get('air_temp', 0),
+            water_c=data.get('engine_temp', 0),
+            oil_press_bar=data.get('oil_pressure_bar', 0),
+            lambda_val=data.get('lambda', 0),
+            boost_bar=max(data.get('map', 0), 0),
+            fuel_level=data.get('fuel_level', 0)
+        )
+
+
 
     def set_triggers(self):
         Window.bind(on_key_down=self.on_key_down)
@@ -347,8 +356,10 @@ def run_cluster(data):
         class CarClusterApp(App):
             def __init__(self):
                 super().__init__()
-                Clock.schedule_interval(lambda x: print('RPM FROM CLUSTER', data.get('rpm', 0)), 1)
-                Clock.schedule_interval(self.update_values, 1/30)
+                def start_update(_):
+                    Clock.schedule_interval(self.update_values, 1/30)
+
+                Clock.schedule_once(start_update, 3)
 
             def update_values(self, _):
                 if(self.dashboard):
@@ -365,13 +376,25 @@ def run_cluster(data):
 
 if __name__ == "__main__":
     print(Window.size)
-    data = {}
-    class CarClusterApp(App):
-        Clock.schedule_interval(lambda x: print(data.get('rpm', 0)), 1)
+    data = {
+        'wheel_speed_fl_kmh': 63,
+        'lambda': 0.826,
+        'map': 0.345,
+        'engine_temp': 67,
+        'air_temp': 102,
+        'rpm': 1420,
+        'oil_pressure_bar': 2.7,
+        'fuel_level': 68
+    }
 
-        def build(self):
-            return Dashboard()
+    run_cluster(data)
 
-    CarClusterApp().run()
+    # class CarClusterApp(App):
+    #     Clock.schedule_interval(lambda x: print(data.get('rpm', 0)), 1)
+
+    #     def build(self):
+    #         return Dashboard()
+
     # CarClusterApp().run()
-    print(Window.size)
+    # # CarClusterApp().run()
+    # print(Window.size)

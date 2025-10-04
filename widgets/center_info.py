@@ -85,7 +85,7 @@ class CenterInfo(Widget):
         self.lbl_iat = add_row("AIR")
         self.lbl_clt = add_row("ENGINE")
         self.lbl_oilp = add_row("OIL")
-        self.lbl_oilp = add_row("FUEL")
+        self.lbl_fuel = add_row("FUEL")
 
         # BOTTOM: BIG readouts (fills remaining vertical space)
         self.big = GridLayout(
@@ -157,6 +157,7 @@ class CenterInfo(Widget):
         oil_press_bar=None,
         lambda_val=None,
         boost_bar=None,
+        fuel_level=None
     ):
         # compact rows
         if intake_c is not None:
@@ -173,6 +174,9 @@ class CenterInfo(Widget):
 
         if oil_press_bar is not None:
             self.lbl_oilp[1].text = f"{oil_press_bar:.1f} BAR"
+
+        if fuel_level is not None:
+            self.lbl_fuel[1].text = f"{fuel_level:.0f} %"
 
         # BIG tiles
         if boost_bar is not None:

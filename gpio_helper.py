@@ -13,7 +13,6 @@ class Pin(Enum):
     C = 21
 
 def read_io(data = {}):
-    print('READING IO')
     GPIO.setmode(GPIO.BCM)
     try:
         for pin in Pin:
@@ -24,7 +23,7 @@ def read_io(data = {}):
 
         while True:
             for pin in Pin:
-                data['io'][pin.name.lower()] = GPIO.input(pin.value)
+                data['io'][pin.name.lower()] = not GPIO.input(pin.value)
 
             print(data['io'])
 
