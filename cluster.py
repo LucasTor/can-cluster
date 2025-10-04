@@ -250,8 +250,8 @@ class Dashboard(Widget):
         self.add_widget(self.rpm_gauge)
         self.add_widget(self.center_info)
 
-        self.left_indicator = TurnIndicator(side='left', blink_hz=2, size=(100, 100), pos=(635, 560))
-        self.right_indicator = TurnIndicator(side='right', blink_hz=2, size=(100, 100), pos=(1185, 560))
+        self.left_indicator = TurnIndicator(side='left', size=(100, 100), pos=(635, 560))
+        self.right_indicator = TurnIndicator(side='right', size=(100, 100), pos=(1185, 560))
         self.add_widget(self.left_indicator)
         self.add_widget(self.right_indicator)
 

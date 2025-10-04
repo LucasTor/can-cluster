@@ -10,19 +10,11 @@ class TurnIndicator(Widget):
     side: 'left' or 'right'
     """
     side = OptionProperty('left', options=('left', 'right'))
-    blink_hz = NumericProperty(2.0)
-    active = BooleanProperty(False)
 
-    def __init__(self, side='left', blink_hz=2.0, **kwargs):
+    def __init__(self, side='left', **kwargs):
         super().__init__(**kwargs)
         self.side = side
-        self.blink_hz = blink_hz
 
-        # state
-        self._blink_on = False
-        self._blink_ev = None
-
-        # graphics refs
         self._col = None
         self._shaft = None
         self._head = None
@@ -79,46 +71,10 @@ class TurnIndicator(Widget):
         # final shaft line
         self._shaft.points = [*shaft_start, *shaft_far]
 
-
-    # --- visibility / blinking ---
-
-    def _set_alpha(self, a_arrow: float):
-        r, g, b, _ = self._col.rgba
-        self._col.rgba = (r, g, b, a_arrow)
-
     def _set_color(self, on):
         color_on = (0.1, 0.1, 0.1, 1)
         color_off = (0.0, 1.0, 0.0, 1)
         self._col.rgba = color_on if on else color_off
 
-    def _blink_tick(self, dt):
-        if not self.active:
-            return
-        self._blink_on = not self._blink_on
-        self._set_color(self._blink_on)
-        # if self._blink_on:
-        #     self._set_alpha(1.0)   # full green
-        # else:
-        #     self._set_alpha(0.3)   # dimmed / ghosted
-
-    def _start_blink(self):
-        if self._blink_ev is None:
-            half_period = max(0.05, 0.5 / max(0.1, self.blink_hz))
-            self._blink_ev = Clock.schedule_interval(self._blink_tick, half_period)
-
-    def _stop_blink(self):
-        if self._blink_ev is not None:
-            self._blink_ev.cancel()
-            self._blink_ev = None
-        self._blink_on = False
-
     def set_active(self, on: bool):
-        if self.active == on:
-            return
-        self.active = on
-        if on:
-            self._set_alpha(1.0)
-            self._start_blink()
-        else:
-            self._stop_blink()
-            self._set_alpha(0.2)  # idle = faint arrow
+        self._set_color(on)
