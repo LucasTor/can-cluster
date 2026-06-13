@@ -3,6 +3,8 @@ from kivy.graphics import Color, Line, Triangle
 from kivy.properties import BooleanProperty, NumericProperty, OptionProperty
 from kivy.clock import Clock
 
+from theme import INDICATOR_ON, INDICATOR_OFF
+
 
 class TurnIndicator(Widget):
     """
@@ -21,7 +23,7 @@ class TurnIndicator(Widget):
 
         with self.canvas:
             # Arrow color
-            self._col = Color(0.0, 1.0, 0.0, 0.0)  # green, hidden initially
+            self._col = Color(*INDICATOR_ON[:3], 0.0)  # green, hidden initially
             # shaft + head
             self._shaft = Line(points=[], width=12, cap='square')
             self._head = Triangle(points=[0, 0, 0, 0, 0, 0])
@@ -72,9 +74,7 @@ class TurnIndicator(Widget):
         self._shaft.points = [*shaft_start, *shaft_far]
 
     def _set_color(self, on):
-        color_on = (0.0, 1.0, 0.0, 1)
-        color_off = (0.1, 0.1, 0.1, 1)
-        self._col.rgba = color_on if on else color_off
+        self._col.rgba = INDICATOR_ON if on else INDICATOR_OFF
 
     def set_active(self, on: bool):
         self._set_color(on)

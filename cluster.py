@@ -1,399 +1,293 @@
+"""
+Car Cluster Dashboard Application
+
+Main application file for the car cluster display system.
+"""
+
 import os
-DEV = os.environ.get('DEV', True)
+from kivy.config import Config
+
+from theme import WINDOW_WIDTH, WINDOW_HEIGHT
+
+# Development mode flag
+DEV = os.environ.get('DEV', 'true').lower() == 'true'
 
 if DEV:
-    os.environ['KIVY_METRICS_DENSITY'] = '1'  # Default is usually 1, try 0.5 if UI is too large
-    os.environ['KIVY_DPI'] = '96'             # Standard DPI
+    os.environ['KIVY_METRICS_DENSITY'] = '1'
+    os.environ['KIVY_DPI'] = '96'
 
-from kivy.config import Config
 Config.set('graphics', 'show_cursor', '0')  # must be before Window import
-Config.set("graphics", "width", "1920")
-Config.set("graphics", "height", "720")
+Config.set("graphics", "width", str(WINDOW_WIDTH))
+Config.set("graphics", "height", str(WINDOW_HEIGHT))
 
-import os
 import kivy
 from kivy.app import App
 from kivy.uix.widget import Widget
-from kivy.graphics import (
-    Color,
-    RoundedRectangle,
-)
-from kivy.uix.label import Label
 from kivy.clock import Clock
 from kivy.core.window import Window
 from kivy.core.text import LabelBase, DEFAULT_FONT
-from kivy.properties import NumericProperty
 
-Window.show_fps = True
-
-from widgets import CenterInfo, Gauge, TurnIndicator
-
-import random
+from widgets import CenterInfo, Gauge, TurnIndicator, ShiftCenterBanner
+from model import SensorState
 
 kivy.require("2.0.0")
 
+# ============================================================================
+# Configuration Constants
+# ============================================================================
 
-# LabelBase.register(DEFAULT_FONT, "fonts/consolas-bold.ttf")
+# Shift banner dimensions
+SHIFT_BANNER_WIDTH = 450
+SHIFT_BANNER_HEIGHT = 600
+
+# Gauge configuration
+SPEED_GAUGE_CONFIG = {
+    'title': "SPEED",
+    'subtitle': "KM/H",
+    'max_value': 240,
+    'unit': "km/h",
+    'size': (600, 600),
+    'pos': (60, 60),
+    'ticks': 13,
+    'angle_range': 270,
+}
+
+RPM_GAUGE_CONFIG = {
+    'title': "RPM",
+    'subtitle': "X1000",
+    'max_value': 8000,
+    'unit': "rpm",
+    'size': (600, 600),
+    'pos': (1260, 60),
+    'ticks': 9,
+    'redline_from': 5500,
+    'label_map': {
+        1000: "1",
+        2000: "2",
+        3000: "3",
+        4000: "4",
+        5000: "5",
+        6000: "6",
+        7000: "7",
+        8000: "8",
+    },
+}
+
+# Turn indicator positions
+LEFT_INDICATOR_POS = (635, 560)
+RIGHT_INDICATOR_POS = (1185, 560)
+INDICATOR_SIZE = (100, 100)
+
+# Shift banner configuration
+SHIFT_RPM_THRESHOLD = 6000
+SHIFT_BLINK_HZ = 5
+
+# Keyboard controls
+KEY_UP_ARROW = 273
+
+# Keyboard demo (dev mode): synthetic rev/speed while the up arrow is held
+DEMO_ACCEL_RPM_PER_S = 3000
+DEMO_COAST_RPM_PER_S = 2000
+DEMO_ACCEL_KMH_PER_S = 60
+DEMO_COAST_KMH_PER_S = 30
+DEMO_IDLE_RPM = 1000
+DEMO_MAX_RPM = 8000
+DEMO_MAX_KMH = 240
+
+# ============================================================================
+# Application Setup
+# ============================================================================
+
+
+Window.show_fps = True
+
+# Register custom font
 LabelBase.register(DEFAULT_FONT, "fonts/Compagnon-Medium.otf")
-from kivy.graphics import Color
-from kivy.graphics import Color, RoundedRectangle
 
 
-class ShiftCenterBanner(Widget):
-    """
-    Plain yellow rounded rectangle with red 'SHIFT' centered.
-    Appears when rpm >= shift_rpm; hidden otherwise.
-    Blinks while visible. Draws in canvas.after so it sits on top.
-    """
-
-    shift_rpm = NumericProperty(7000)
-
-    def __init__(
-        self,
-        shift_rpm=7000,
-        width_ratio=0.36,
-        height_ratio=0.18,
-        corner_px=22,
-        blink_hz=2.0,  # blink frequency (cycles/sec)
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.shift_rpm = shift_rpm
-        self.width_ratio = width_ratio
-        self.height_ratio = height_ratio
-        self.corner_px = corner_px
-        self.blink_hz = blink_hz
-
-        # state
-        self._visible = False
-        self._blink_on = False
-        self._blink_ev = None
-
-        # graphics refs
-        self._fill_col = None
-        self._border_col = None
-        self._rect = None
-        self._border = None
-
-        # label
-
-        # draw on top of siblings
-        with self.canvas:
-            self._fill_col = Color(1, 1, 0, 0.0)  # yellow, hidden initially
-            self._rect = RoundedRectangle(
-                pos=(0, 0), size=(0, 0), radius=[self.corner_px]
-            )
-
-        self._label = Label(
-            text="[b]SHIFT[/b]",
-            markup=True,
-            font_size="64sp",
-            color=(1, 0, 0, 0.0),  # hidden until visible
-            halign="center",
-            valign="middle",
-            font_name='fonts/RobotoMono-Bold.ttf'
-            # size_hint=(None, None),
-        )
-
-        self.add_widget(self._label)
-
-        # cover the parent
-        self.bind(pos=self._layout, size=self._layout)
-
-    # keep sized to parent (Dashboard)
-    def on_parent(self, *args):
-        if self.parent:
-            self.size = self.parent.size
-            self.pos = self.parent.pos
-            self.parent.bind(size=self._sync_to_parent, pos=self._sync_to_parent)
-            self._layout()
-
-    def _sync_to_parent(self, *_):
-        if self.parent:
-            self.size = self.parent.size
-            self.pos = self.parent.pos
-            self._layout()
-
-    def _layout(self, *_):
-        self.size = (450, 600)
-        self._center_vert = (720 / 2) - (self.size[1] / 2)
-
-        # rect geometry
-        # self._rect.pos = (bx, self._center_vert)
-        self._rect.size = (450, 600)
-        self._reposition()
-        # self._rect.radius = [self.corner_px]
-
-        # label centered & wrapped
-        self._label.size = self.size
-        
-        self._label.text_size = self._label.size
-        self._label.halign = "center"
-        self._label.valign = "middle"
-
-        print(self._label.center, self._rect.pos, self._rect.size)
-
-        # self._label.y -= self._rect.size[1] * 0.02
-
-    def _reposition(self):
-        # center horizontally
-        self._rect.pos = ((Window.width - 450) / 2, self._center_vert)
-        self._label.pos = ((Window.width - 450) / 2, self._center_vert)
-
-
-    # --- visibility & blinking ---
-
-    def _apply_visible(self, show: bool):
-        if self._visible == show:
-            return
-        self._visible = show
-
-        if show:
-            # set initial "bright" state
-            self._set_alpha(fill=0.95, text=1.0, border=1.0)
-            self._start_blink()
-        else:
-            self._stop_blink()
-            self._set_alpha(fill=0.0, text=0.0, border=0.0)
-
-    def _set_alpha(self, fill: float, text: float, border: float):
-        # fill (yellow)
-        fr, fg, fb, _ = self._fill_col.rgba
-        self._fill_col.rgba = (fr, fg, fb, fill)
-        # text (red)
-        self._label.color = (1, 0, 0, text)
-        # border (white)
-        # br, bg, bb, _ = self._border_col.rgba
-        # self._border_col.rgba = (br, bg, bb, border)
-
-    def _blink_tick(self, dt):
-        # toggle between bright and dim states
-        self._blink_on = not self._blink_on
-        if not self._visible:
-            return
-        if self._blink_on:
-            self._set_alpha(fill=1, text=1.0, border=1.0)
-        else:
-            self._set_alpha(
-                fill=1, text=0.60, border=1.0
-            )  # keep border steady; change if you want
-
-    def _start_blink(self):
-        if self._blink_ev is None:
-            # toggle twice per cycle => schedule at half-period
-            half_period = max(0.05, 0.5 / max(0.1, self.blink_hz))
-            from kivy.clock import Clock
-
-            self._blink_ev = Clock.schedule_interval(self._blink_tick, half_period)
-
-    def _stop_blink(self):
-        if self._blink_ev is not None:
-            self._blink_ev.cancel()
-            self._blink_ev = None
-        self._blink_on = False
-
-    # --- public API ---
-
-    def set_rpm(self, rpm: float):
-        self._apply_visible(rpm >= self.shift_rpm)
-
-    # optional: force a one-off flash to confirm visibility
-    def demo_flash(self, seconds=0.8):
-        self._apply_visible(True)
-        from kivy.clock import Clock
-
-        Clock.schedule_once(lambda *_: self._apply_visible(False), seconds)
+# ============================================================================
+# Dashboard Widget
+# ============================================================================
 
 class Dashboard(Widget):
+    """Main dashboard widget containing all gauge and info displays."""
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
         self.accelerating = False
-        self.speed = 0
-        self.rpm = 1000
+        self.hazard_on = False
 
-        self.speed_gauge = Gauge(
-            title="SPEED",
-            subtitle="KM/H",
-            max_value=240,
-            unit="km/h",
-            size=(600, 600),
-            pos=(60, 60),
-            ticks=13,
-            angle_range=270,
-        )
+        self._setup_gauges()
+        self._setup_center_info()
+        self._setup_turn_indicators()
+        self._setup_shift_banner()
 
-        self.rpm_gauge = Gauge(
-            title="RPM",
-            subtitle="X1000",
-            max_value=8000,
-            unit="rpm",
-            size=(600, 600),
-            pos=(1260, 60),
-            ticks=9,
-            redline_from=5500,
-            label_map={
-                1000: "1",
-                2000: "2",
-                3000: "3",
-                4000: "4",
-                5000: "5",
-                6000: "6",
-                7000: "7",
-                8000: "8",
-            },
-        )
+        if DEV:
+            Window.size = (WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2)
 
-        self.center_info = CenterInfo()
+        Clock.schedule_once(lambda x: self._setup_keyboard_triggers(), 3)
 
+    def _setup_gauges(self):
+        """Initialize speed and RPM gauges."""
+        self.speed_gauge = Gauge(**SPEED_GAUGE_CONFIG)
         self.add_widget(self.speed_gauge)
+
+        self.rpm_gauge = Gauge(**RPM_GAUGE_CONFIG)
         self.add_widget(self.rpm_gauge)
+
+    def _setup_center_info(self):
+        """Initialize center information display."""
+        self.center_info = CenterInfo()
         self.add_widget(self.center_info)
 
-        self.left_indicator = TurnIndicator(side='left', size=(100, 100), pos=(635, 560))
-        self.right_indicator = TurnIndicator(side='right', size=(100, 100), pos=(1185, 560))
+    def _setup_turn_indicators(self):
+        """Initialize left and right turn indicators."""
+        self.left_indicator = TurnIndicator(
+            side='left',
+            size=INDICATOR_SIZE,
+            pos=LEFT_INDICATOR_POS
+        )
+        self.right_indicator = TurnIndicator(
+            side='right',
+            size=INDICATOR_SIZE,
+            pos=RIGHT_INDICATOR_POS
+        )
         self.add_widget(self.left_indicator)
         self.add_widget(self.right_indicator)
 
-        # Optional: hazard state
-        self.hazard_on = False
-
-        if DEV:
-            Window.size = (1920 / 2, 720 / 2)
-            # Clock.schedule_once(lambda x: Clock.schedule_interval(self.simulate_data, 1), 3)
-        Clock.schedule_once(lambda x: self.set_triggers(), 3)
-
-        self.shift_overlay = ShiftCenterBanner(shift_rpm=6000, blink_hz=5)
+    def _setup_shift_banner(self):
+        """Initialize shift indicator banner."""
+        self.shift_overlay = ShiftCenterBanner(
+            shift_rpm=SHIFT_RPM_THRESHOLD,
+            blink_hz=SHIFT_BLINK_HZ
+        )
         self.add_widget(self.shift_overlay)
 
-        # with self.canvas:
-        #     Color(0, 0, 0, .2)
-        #     Rectangle(pos=(0, 0), size=(1920, 720))
-
-    def update(self, data):
-        self.rpm_gauge.update_value(data.get('rpm', 0))
-        self.speed_gauge.update_value(data.get('wheel_speed_fl_kmh', 0))
-        self.center_info.set_values(
-            intake_c=data.get('air_temp', 0),
-            water_c=data.get('engine_temp', 0),
-            oil_press_bar=data.get('oil_pressure_bar', 0),
-            lambda_val=data.get('lambda', 0),
-            boost_bar=max(data.get('map', 0), 0),
-            fuel_level=data.get('fuel_level', 0)
-        )
-
-        self.right_indicator.set_active(data.get('io', {}).get('right_indicator'))
-        self.left_indicator.set_active(data.get('io', {}).get('left_indicator'))
-
-
-    def set_triggers(self):
+    def _setup_keyboard_triggers(self):
+        """Set up keyboard event handlers."""
         Window.bind(on_key_down=self.on_key_down)
         Window.bind(on_key_up=self.on_key_up)
 
-        # Clock.schedule_interval(self.update_gauges, 1 / 30)
+    def update(self, state):
+        """
+        Update all dashboard displays from the shared sensor state.
 
-    def simulate_data(self, dt):
-        speed = random.uniform(0, 250)
-        rpm = random.uniform(1000, 8000)
+        Args:
+            state: A ``SensorState`` instance, continuously updated by the CAN
+                and GPIO reader threads (see model.py for the full schema).
+        """
+        self.rpm_gauge.update_value(state.rpm)
+        self.speed_gauge.update_value(state.wheel_speed_fl_kmh)
 
-        # Simulated engine stats
-        intake_c = random.uniform(25, 65)
-        water_c = random.uniform(70, 105)
-        oil_press_bar = random.uniform(1.5, 5.0)
-        lambda_val = random.uniform(0.8, 1.2)
-        boost_bar = random.uniform(0.0, 1.5)  # demo boost
+        self.shift_overlay.set_rpm(state.rpm)
 
-        self.speed_gauge.update_value(speed)
-        self.rpm_gauge.update_value(rpm)
-        self.shift_overlay.set_rpm(self.rpm)
         self.center_info.set_values(
-            intake_c=intake_c,
-            water_c=water_c,
-            oil_press_bar=oil_press_bar,
-            lambda_val=lambda_val,
-            boost_bar=boost_bar,
+            intake_c=state.air_temp,
+            water_c=state.engine_temp,
+            oil_press_bar=state.oil_pressure_bar,
+            lambda_val=state.lambda_afr,
+            boost_bar=max(state.map, 0),
+            fuel_level=state.fuel_level,
         )
 
+        self.right_indicator.set_active(state.io.right_indicator)
+        self.left_indicator.set_active(state.io.left_indicator)
+
     def on_key_down(self, window, key, scancode, codepoint, modifiers):
-        # Key 273 = up arrow; change as needed (e.g., 119 for 'w')
-        if key == 273:
+        """Handle key press events."""
+        print(key)
+        if key == KEY_UP_ARROW:
             self.accelerating = True
 
     def on_key_up(self, window, key, scancode):
-        if key == 273:
+        """Handle key release events."""
+        if key == KEY_UP_ARROW:
             self.accelerating = False
 
-    def update_gauges(self, dt):
-        if self.accelerating:
-            self.speed += 60 * dt  # e.g., accelerate at 60 km/h per second
-            self.rpm += 3000 * dt  # increase RPM
+
+# ============================================================================
+# Application Entry Point
+# ============================================================================
+
+class CarClusterApp(App):
+    """Main Kivy application for the car cluster dashboard."""
+
+    def __init__(self, state=None):
+        super().__init__()
+        self.state = state or SensorState()
+        self.dashboard = None
+
+    def build(self):
+        """Build and return the main dashboard widget."""
+        self.dashboard = Dashboard()
+        return self.dashboard
+
+    def on_start(self):
+        """Start the render loop (plus the keyboard demo source in dev mode)."""
+        def start_update(_):
+            Clock.schedule_interval(self.update_values, 1 / 30)
+            if DEV:
+                # No CAN bus on a desktop — let the up-arrow key feed synthetic
+                # data into the same state the render loop reads.
+                Clock.schedule_interval(self._demo_step, 1 / 60)
+        Clock.schedule_once(start_update, 3)
+
+    def update_values(self, _):
+        """Update dashboard with current data."""
+        if self.dashboard:
+            self.dashboard.update(self.state)
+
+    def _demo_step(self, dt):
+        """Advance synthetic RPM/speed from the up-arrow accelerator (dev only).
+
+        Acts as a stand-in CAN source: it mutates the same ``SensorState`` the
+        render loop reads, so holding the up arrow revs the engine and the whole
+        cluster (gauges, shift banner) responds exactly as it would to real data.
+        """
+        if self.dashboard and self.dashboard.accelerating:
+            self.state.rpm = min(self.state.rpm + DEMO_ACCEL_RPM_PER_S * dt, DEMO_MAX_RPM)
+            self.state.wheel_speed_fl_kmh = min(
+                self.state.wheel_speed_fl_kmh + DEMO_ACCEL_KMH_PER_S * dt, DEMO_MAX_KMH
+            )
         else:
-            self.speed -= 30 * dt  # slow down
-            self.rpm -= 2000 * dt
+            self.state.rpm = max(self.state.rpm - DEMO_COAST_RPM_PER_S * dt, DEMO_IDLE_RPM)
+            self.state.wheel_speed_fl_kmh = max(
+                self.state.wheel_speed_fl_kmh - DEMO_COAST_KMH_PER_S * dt, 0
+            )
 
-        # Clamp values
-        self.speed = max(0, min(self.speed, 240))
-        self.rpm = max(1000, min(self.rpm, 8000))
 
-        self.speed_gauge.update_value(self.speed)
-        self.rpm_gauge.update_value(self.rpm)
-        self.shift_overlay.set_rpm(self.rpm)  # <--- add this
-        import random
+def run_cluster(state):
+    """
+    Run the cluster application against the provided sensor state.
 
-        # You can fake some center info too
-        self.center_info.set_values(
-            intake_c=30 + self.speed / 10,
-            water_c=85 + (self.rpm - 1000) / 1000,
-            oil_press_bar=1.5 + (self.rpm / 8000) * 3.5,
-            lambda_val=random.uniform(0.9, 0.99),
-            boost_bar=(self.rpm - 1000) / 7000 * 1.5,
-        )
-
-    
-def run_cluster(data):
+    Args:
+        state: A ``SensorState`` instance to display (and read live updates from).
+    """
     try:
-        class CarClusterApp(App):
-            def __init__(self):
-                super().__init__()
-                def start_update(_):
-                    Clock.schedule_interval(self.update_values, 1/30)
-
-                Clock.schedule_once(start_update, 3)
-
-            def update_values(self, _):
-                if(self.dashboard):
-                    self.dashboard.update(data)
-
-            def build(self):
-                self.dashboard = Dashboard()
-                return self.dashboard
-
-        CarClusterApp().run()
+        app = CarClusterApp(state)
+        app.run()
     except Exception as e:
-        print(e)
-        
+        print(f"Error running cluster: {e}")
+
+
+# ============================================================================
+# Main Entry Point
+# ============================================================================
 
 if __name__ == "__main__":
-    print(Window.size)
-    data = {
-        'wheel_speed_fl_kmh': 63,
-        'lambda': 0.826,
-        'map': 0.345,
-        'engine_temp': 67,
-        'air_temp': 102,
-        'rpm': 1420,
-        'oil_pressure_bar': 2.7,
-        'fuel_level': 68
-    }
+    print(f"Window size: {Window.size}")
+    
+    # Sample data for testing
+    state = SensorState(
+        wheel_speed_fl_kmh=63,
+        lambda_afr=0.826,
+        map=0.345,
+        engine_temp=67,
+        air_temp=102,
+        rpm=1420,
+        oil_pressure_bar=2.7,
+        fuel_level=68,
+    )
 
-    run_cluster(data)
-
-    # class CarClusterApp(App):
-    #     Clock.schedule_interval(lambda x: print(data.get('rpm', 0)), 1)
-
-    #     def build(self):
-    #         return Dashboard()
-
-    # CarClusterApp().run()
-    # # CarClusterApp().run()
-    # print(Window.size)
+    run_cluster(state)

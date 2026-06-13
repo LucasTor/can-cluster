@@ -3,13 +3,13 @@ from concurrent.futures import ThreadPoolExecutor
 from can_helper import read_can
 from gpio_helper import read_io
 from cluster import run_cluster
-import time
+from model import SensorState
 
 if __name__ == '__main__':
-    data = {}
+    state = SensorState()
 
     ex = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ftcan")
-    can_reader   = ex.submit(read_can, data=data)
-    io_reader   = ex.submit(read_io, data=data)
+    can_reader   = ex.submit(read_can, state=state)
+    io_reader   = ex.submit(read_io, state=state)
 
-    run_cluster(data)
+    run_cluster(state)

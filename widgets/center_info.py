@@ -1,6 +1,4 @@
 from kivy.uix.widget import Widget
-
-from kivy.uix.widget import Widget
 from kivy.uix.label import Label
 from kivy.core.window import Window
 from kivy.uix.gridlayout import GridLayout
@@ -11,28 +9,50 @@ from kivy.graphics import (
     RoundedRectangle,
 )
 
+from theme import ACCENT, FG, CARD_WIDTH, CARD_HEIGHT, CARD_RADIUS, WINDOW_HEIGHT
+from .readout import Readout
+
+
 class CenterInfo(Widget):
     """
     A center 'card' showing engine stats.
-    Top: compact grid (AIR / ENGINE / OIL)
+    Top: compact grid (AIR / ENGINE / OIL / FUEL)
     Bottom: BIG readouts that expand to fill remaining space (BOOST / LAMBDA)
+
+    The displayed fields are driven by the ``COMPACT_FIELDS`` / ``BIG_FIELDS``
+    specs below — adding or restyling a readout is a one-line change.
     """
+
+    # (key, label, value format, initial value, warn predicate)
+    COMPACT_FIELDS = [
+        ("air",    "AIR",    "{:.0f} °C",  None, lambda v: v > 50),
+        ("engine", "ENGINE", "{:.0f} °C",  None, None),
+        ("oil",    "OIL",    "{:.1f} BAR", None, None),
+        ("fuel",   "FUEL",   "{:.0f} %",   None, None),
+    ]
+    BIG_FIELDS = [
+        ("boost",  "BOOST",  "{:.2f}", 0.0, lambda v: v >= 1.0),
+        ("lambda", "LAMBDA", "{:.2f}", 1.0, lambda v: v < 0.85 or v > 1.05),
+    ]
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
+        self.readouts = {}
+
         # initial size and position (will auto-center on window resize)
-        self.size = (450, 600)
-        self._center_vert = (720 / 2) - (self.size[1] / 2)
+        self.size = (CARD_WIDTH, CARD_HEIGHT)
+        self._center_vert = (WINDOW_HEIGHT / 2) - (self.size[1] / 2)
         self._reposition()
 
         # background card
         with self.canvas.before:
-            Color(0.2392, 0.4588, 0.6588, 1.0)
-            self.bg = RoundedRectangle(pos=self.pos, size=self.size, radius=[20])
-            Color(1, 1, 1, 1)
+            Color(*ACCENT)
+            self.bg = RoundedRectangle(pos=self.pos, size=self.size, radius=[CARD_RADIUS])
+            Color(*FG)
             self.border = Line(
-                rounded_rectangle=[self.x, self.y, self.width, self.height, 20], width=2
+                rounded_rectangle=[self.x, self.y, self.width, self.height, CARD_RADIUS],
+                width=2,
             )
 
         # ---- layouts ----
@@ -50,92 +70,78 @@ class CenterInfo(Widget):
         # TOP: compact grid (fixed height)
         self.grid = GridLayout(
             cols=2,
-            rows=4,  # only the compact rows up here
+            rows=len(self.COMPACT_FIELDS),
             size_hint=(1, None),
             height=200,
             spacing=10,
         )
         self.vbox.add_widget(self.grid)
-
-        def add_row(label_text):
-            name = Label(
-                text=f"[b]{label_text}[/b]",
-                markup=True,
-                font_size="40sp",
-                halign="left",
-                valign="middle",
-                size_hint=(1, None),
-                height=40,
-            )
-            val = Label(
-                text="—",
-                font_size="40sp",
-                bold=True,
-                halign="right",
-                valign="middle",
-                size_hint=(1, None),
-                height=40,
-            )
-            name.bind(size=name.setter("text_size"))
-            val.bind(size=val.setter("text_size"))
-            self.grid.add_widget(name)
-            self.grid.add_widget(val)
-            return name, val
-
-        self.lbl_iat = add_row("AIR")
-        self.lbl_clt = add_row("ENGINE")
-        self.lbl_oilp = add_row("OIL")
-        self.lbl_fuel = add_row("FUEL")
+        for key, label, fmt, initial, warn in self.COMPACT_FIELDS:
+            self._add_compact_row(key, label, fmt, initial, warn)
 
         # BOTTOM: BIG readouts (fills remaining vertical space)
         self.big = GridLayout(
-            rows=2,
+            rows=len(self.BIG_FIELDS),
             size_hint=(1, 1),  # take all remaining space
             spacing=12,
         )
         self.vbox.add_widget(self.big)
-
-        # BOOST big tile
-        self.boost_box = BoxLayout(orientation="vertical", padding=[10, 10, 10, 10])
-        self.big.add_widget(self.boost_box)
-        self.big_boost_title = Label(
-            text="[b]BOOST[/b]",
-            markup=True,
-            font_size="44sp",
-            halign="center",
-            valign="middle",
-            size_hint=(1, None),
-            height=30,
-        )
-        self.boost_box.add_widget(self.big_boost_title)
-        self.big_boost_value = Label(
-            text="0.00", font_size="160sp", bold=True, halign="center", valign="middle" , padding=[0, 0, 0, 24]
-        )
-        self.big_boost_value.bind(size=self.big_boost_value.setter("text_size"))
-        self.boost_box.add_widget(self.big_boost_value)
-
-        # LAMBDA big tile
-        self.lambda_box = BoxLayout(orientation="vertical", padding=[10, 10, 10, 10])
-        self.big.add_widget(self.lambda_box)
-        self.big_lambda_title = Label(
-            text="[b]LAMBDA[/b]",
-            markup=True,
-            font_size="44sp",
-            halign="center",
-            valign="middle",
-            size_hint=(1, None),
-            height=30,
-        )
-        self.lambda_box.add_widget(self.big_lambda_title)
-        self.big_lambda_value = Label(
-            text="1.00", font_size="160sp", bold=True, halign="center", valign="middle", padding=[0, 0, 0, 24]
-        )
-        self.big_lambda_value.bind(size=self.big_lambda_value.setter("text_size"))
-        self.lambda_box.add_widget(self.big_lambda_value)
+        for key, label, fmt, initial, warn in self.BIG_FIELDS:
+            self._add_big_tile(key, label, fmt, initial, warn)
 
         # keep visuals in place on size/pos changes
         self.bind(pos=self._sync_graphics, size=self._sync_graphics)
         Window.bind(on_resize=lambda *_: self._reposition())
+
+    def _add_compact_row(self, key, label, fmt, initial, warn):
+        name = Label(
+            text=f"[b]{label}[/b]",
+            markup=True,
+            font_size="40sp",
+            halign="left",
+            valign="middle",
+            size_hint=(1, None),
+            height=40,
+        )
+        val = Label(
+            text="—" if initial is None else fmt.format(initial),
+            font_size="40sp",
+            bold=True,
+            halign="right",
+            valign="middle",
+            size_hint=(1, None),
+            height=40,
+        )
+        name.bind(size=name.setter("text_size"))
+        val.bind(size=val.setter("text_size"))
+        self.grid.add_widget(name)
+        self.grid.add_widget(val)
+        self.readouts[key] = Readout(name, val, fmt, warn)
+
+    def _add_big_tile(self, key, label, fmt, initial, warn):
+        box = BoxLayout(orientation="vertical", padding=[10, 10, 10, 10])
+        self.big.add_widget(box)
+        title = Label(
+            text=f"[b]{label}[/b]",
+            markup=True,
+            font_size="44sp",
+            halign="center",
+            valign="middle",
+            size_hint=(1, None),
+            height=30,
+        )
+        box.add_widget(title)
+        value = Label(
+            text=fmt.format(initial if initial is not None else 0.0),
+            font_size="160sp",
+            bold=True,
+            halign="center",
+            valign="middle",
+            padding=[0, 0, 0, 24],
+        )
+        value.bind(size=value.setter("text_size"))
+        box.add_widget(value)
+        self.readouts[key] = Readout(title, value, fmt, warn)
 
     def _reposition(self):
         # center horizontally
@@ -145,7 +151,7 @@ class CenterInfo(Widget):
         # move background + outline with widget
         self.bg.pos = self.pos
         self.bg.size = self.size
-        self.border.rounded_rectangle = [self.x, self.y, self.width, self.height, 20]
+        self.border.rounded_rectangle = [self.x, self.y, self.width, self.height, CARD_RADIUS]
         # sync the layout container
         self.vbox.pos = self.pos
         self.vbox.size = self.size
@@ -157,45 +163,11 @@ class CenterInfo(Widget):
         oil_press_bar=None,
         lambda_val=None,
         boost_bar=None,
-        fuel_level=None
+        fuel_level=None,
     ):
-        # compact rows
-        if intake_c is not None:
-            self.lbl_iat[1].text = f"{int(round(intake_c))} °C"
-            if intake_c > 50:
-                self.lbl_iat[0].color = (1, 0, 0, 1)
-                self.lbl_iat[1].color = (1, 0, 0, 1)
-            else:
-                self.lbl_iat[0].color = (1, 1, 1, 1)
-                self.lbl_iat[1].color = (1, 1, 1, 1)
-
-        if water_c is not None:
-            self.lbl_clt[1].text = f"{int(round(water_c))} °C"
-
-        if oil_press_bar is not None:
-            self.lbl_oilp[1].text = f"{oil_press_bar:.1f} BAR"
-
-        if fuel_level is not None:
-            self.lbl_fuel[1].text = f"{fuel_level:.0f} %"
-
-        # BIG tiles
-        if boost_bar is not None:
-            self.big_boost_value.text = f"{boost_bar:.2f}"
-            # optional color hint >1.0 bar
-            if boost_bar >= 1.0:
-                self.big_boost_value.color = (1, 0, 0, 1)
-                self.big_boost_title.color = (1, 0, 0, 1)
-            else:
-                self.big_boost_value.color = (1, 1, 1, 1)
-                self.big_boost_title.color = (1, 1, 1, 1)
-
-        if lambda_val is not None:
-            self.big_lambda_value.text = f"{lambda_val:.2f}"
-            # optional color hint for rich/lean
-            if lambda_val < 0.85 or lambda_val > 1.05:
-                self.big_lambda_value.color = (1, 0, 0, 1)
-                self.big_lambda_title.color = (1, 0, 0, 1)
-            else:
-                self.big_lambda_value.color = (1, 1, 1, 1)
-                self.big_lambda_title.color = (1, 1, 1, 1)
-
+        self.readouts["air"].set(intake_c)
+        self.readouts["engine"].set(water_c)
+        self.readouts["oil"].set(oil_press_bar)
+        self.readouts["fuel"].set(fuel_level)
+        self.readouts["boost"].set(boost_bar)
+        self.readouts["lambda"].set(lambda_val)

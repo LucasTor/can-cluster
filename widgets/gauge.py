@@ -11,6 +11,8 @@ from kivy.graphics import (
 from kivy.uix.label import Label
 from kivy.clock import Clock
 
+from theme import ACCENT, FG, DARK, NEEDLE, REDLINE, WARNING
+
 import math
 
 
@@ -23,7 +25,7 @@ class Gauge(Widget):
         unit="km/h",
         ticks=10,
         angle_range=270,
-        label_map={},
+        label_map=None,
         show_digital_value=True,
         redline_from=None,
         **kwargs,
@@ -35,7 +37,7 @@ class Gauge(Widget):
         self.unit = unit
         self.ticks = ticks
         self.angle_range = angle_range
-        self.label_map = label_map
+        self.label_map = label_map or {}
         self.show_title = show_digital_value
         self.redline_from = redline_from
         self.needle_angle = 180
@@ -74,7 +76,7 @@ class Gauge(Widget):
         center_x, center_y = self.center
         radius = min(self.width, self.height) / 2
 
-        Color(1, 1, 1, 1)
+        Color(*FG)
         self.border = Line(
             rounded_rectangle=[
                 self.center_x - radius,
@@ -85,14 +87,11 @@ class Gauge(Widget):
             ],
             width=4,
         )
-        # Ellipse(pos=(self.pos[0] - radius * .015, self.pos[1] - radius * .015), size=(radius * 2.03, radius * 2.03), halign="center", valign="middle")
-        Color(0.1, 0.1, 0.1)
-        # botar um fade q sai do coiso do centro
+        Color(*DARK)
         Ellipse(pos=self.pos, size=self.size)
-        Color(0.2392, 0.4588, 0.6588, 1)
+        Color(*ACCENT)
         BoxShadow(inset=True, pos=(self.pos[0] , self.pos[1] ), size=(radius * 2, radius * 2), halign="center", valign="middle", border_radius=(radius * 2.03, radius * 2.03, radius * 2.03, radius * 2.03), blur_radius=100)
-        Color(0.1, 0.1, 0.1)
-        print(self._angle_for_value(0), self._angle_for_value(self.max_value))
+        Color(*DARK)
         Ellipse(pos=self.pos, size=self.size, angle_start=self._angle_for_value(self.max_value), angle_end=self._angle_for_value(self.max_value) + (360 - self.angle_range))
         tick_count = self.ticks
         tick_angle = (-self.angle_range) / (tick_count - 1)
@@ -108,7 +107,7 @@ class Gauge(Widget):
             x2 = center_x + outer_radius * math.cos(angle_rad)
             y2 = center_y + outer_radius * math.sin(angle_rad)
 
-            Color(1, 1, 1)
+            Color(*FG)
             Line(points=[x1, y1, x2, y2], width=2)
 
             value = int((i / (tick_count - 1)) * self.max_value)
@@ -158,7 +157,7 @@ class Gauge(Widget):
             # Ensure start < end for Kivy's CCW arc
             if start > end:
                 start, end = end, start
-            Color(1, 0, 0, 0.5)
+            Color(*REDLINE)
             # Slightly inside the outer edge so it looks clean
             Line(
                 circle=(center_x, center_y, radius * 0.97, start, end),
@@ -183,7 +182,7 @@ class Gauge(Widget):
             self.rot = Rotate(
                 origin=(self.center_x, self.center_y), angle=self.needle_angle
             )
-            Color(0.9882, 0.2471, 0.1490, 1.0)
+            Color(*NEEDLE)
             start_y = self.center_y + self.height / 4
             end_y = self.center_y + self.height / 2
             self.needle = Line(
@@ -207,9 +206,9 @@ class Gauge(Widget):
             self.value_label.text = f"{int(clamped)}"
 
             if self.redline_from and self.value > self.redline_from:
-                self.value_label.color = (1, 0, 0, 1)
+                self.value_label.color = WARNING
             else:
-                self.value_label.color = (1, 1, 1, 1)
+                self.value_label.color = FG
 
         self.value_label.center = self.center
 

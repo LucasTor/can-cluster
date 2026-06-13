@@ -3,6 +3,8 @@ import can
 import struct
 from collections import deque
 
+from model import SensorState
+
 # --------- Simplified broadcast (FT450/550/600): 0x14080600..0x14080603 ----------
 # Each frame packs 4 signed 16-bit values (big-endian) = 8 bytes total.
 # Units/scalers per FT CAN 2.0 manual.
@@ -69,7 +71,9 @@ PARSERS = {
     MSG_WHEEL_SPEEDS:    parse_0x14080603,
 }
 
-def read_can(interface="socketcan", channel="can0", print_fast=False, data = {}):
+def read_can(interface="socketcan", channel="can0", print_fast=False, state=None):
+    if state is None:
+        state = SensorState()
     print("Starting FTCAN 2.0 simplified listener on", channel)
 
     # Filters: only the simplified frames we care about (extended IDs)
@@ -91,22 +95,19 @@ def read_can(interface="socketcan", channel="can0", print_fast=False, data = {})
                 continue
 
             parsed = parser(msg.data)
-            data.update(parsed)
+            state.update(parsed)
 
             if print_fast:
                 # Minimal “fast path” print for RPM and a vehicle speed estimation.
-                # Vehicle speed = average of the 4 wheel speeds when present.
-                rpm = data.get("rpm")
-                wheels = [data.get("wheel_speed_fr_kmh"),
-                          data.get("wheel_speed_fl_kmh"),
-                          data.get("wheel_speed_rr_kmh"),
-                          data.get("wheel_speed_rl_kmh")]
-                spds = [v for v in wheels if isinstance(v, int)]
-                veh_kmh = round(sum(spds) / len(spds), 1) if spds else None
+                # Vehicle speed = average of the 4 wheel speeds.
+                rpm = state.rpm
+                wheels = [state.wheel_speed_fr_kmh,
+                          state.wheel_speed_fl_kmh,
+                          state.wheel_speed_rr_kmh,
+                          state.wheel_speed_rl_kmh]
+                veh_kmh = round(sum(wheels) / len(wheels), 1)
 
-                line = f"RPM={rpm if rpm is not None else '-'}"
-                if veh_kmh is not None:
-                    line += f"  Speed≈{veh_kmh} km/h"
+                line = f"RPM={rpm}  Speed≈{veh_kmh} km/h"
                 if not last_lines or last_lines[-1] != line:
                     print(line)
                     last_lines.append(line)
@@ -119,14 +120,14 @@ def read_can(interface="socketcan", channel="can0", print_fast=False, data = {})
 from concurrent.futures import ThreadPoolExecutor
 import time
 if __name__ == "__main__":
-    data = {}
+    state = SensorState()
 
     def print_can(recv):
         while True:
-            print('RPM:', recv.get('rpm', 0))
+            print('RPM:', recv.rpm)
             time.sleep(0.1)
 
     with ThreadPoolExecutor(max_workers=2, thread_name_prefix="ftcan") as ex:
-        fut_reader   = ex.submit(read_can, data=data)
-        fut_consumer = ex.submit(print_can, recv=data)
+        fut_reader   = ex.submit(read_can, state=state)
+        fut_consumer = ex.submit(print_can, recv=state)
 
