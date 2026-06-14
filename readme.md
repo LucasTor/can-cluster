@@ -8,7 +8,7 @@ The styling is a minimal, period-with-a-cyber-edge look anchored on the car's "A
 blue (modelled on a Claude Design mockup, *Painel Gol Minimal*): hairline analog gauges, a
 no-box centre readout, and tell-tale "pills" that stay dark until they have something to say.
 
-![cluster](https://github.com/user-attachments/assets/12ae0d82-3a5f-421d-b1bd-91bb32b56ce8)
+![cluster](docs/cluster.png)
 
 ## Hardware
 

@@ -45,6 +45,8 @@ class SensorState:
     pit_limit: bool = False
     two_step: bool = False       # launch control / 2-step active (FTCAN launch mode)
     radiator_fan: bool = False   # cooling fan output on
+    night: bool = False          # ECU day/night mode (night = dim the display)
+    battery: float = 0.0         # battery voltage (V)
     fuel_level: float = 0.0      # %
     # wheel speeds (km/h)
     wheel_speed_fr_kmh: float = 0.0

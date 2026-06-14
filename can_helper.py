@@ -1,89 +1,124 @@
 #!/usr/bin/env python3
+"""FTCAN 2.0 tagged real-time broadcast reader.
+
+FuelTech devices broadcast measurements on the "real-time reading broadcast"
+messages (MessageID 0x_FF — i.e. the CAN frame's low byte is 0xFF). Each
+measurement is a MeasureID(2 bytes) + Value(2 bytes) pair, big-endian, where
+MeasureID = (DataID << 1) | status_bit. Frames come in three layouts:
+
+  * Standard CAN (DataFieldID 0): the data field is just MeasureID/Value pairs.
+  * FTCAN single packet (DataFieldID 2/3, first byte 0xFF): pairs after the 0xFF.
+  * FTCAN segmented (first byte = segment index): segment 0 carries a 2-byte
+    total length then the payload start; following segments append; reassembled
+    into MeasureID/Value pairs.
+
+We listen to every device on the bus (ECU + wideband, etc.) and map the DataIDs
+we care about into SensorState. (See decode_dump.py to inventory a capture, and
+log_realtime() below to discover still-unmapped signals like the fan output.)
+"""
+
 import can
 import time
-import struct
-from collections import deque
 
 from model import SensorState
 
-# --------- Simplified broadcast (FT450/550/600): 0x14080600..0x14080603 ----------
-# Each frame packs 4 signed 16-bit values (big-endian) = 8 bytes total.
-# Units/scalers per FT CAN 2.0 manual.
-
-# Message IDs (extended)
-MSG_TPS_MAP_TEMPS   = 0x14080600  # TPS / MAP / AirTemp / EngineTemp
-MSG_PRESSURES_GEAR  = 0x14080601  # OilPress / FuelPress / WaterPress / Gear
-MSG_O2_RPM_OILT_PIT = 0x14080602  # Exhaust O2 (lambda) / RPM / Oil Temp / Pit Limit
-MSG_WHEEL_SPEEDS    = 0x14080603  # Wheel Speeds FR / FL / RR / RL
-
-# Optional: map numeric gear to a friendlier label (Note 2 in manual)
-GEAR_LABEL = {
-    -2: "P",
-    -1: "R",
-     0: "N",
-     1: "1",
-     2: "2",
-     3: "3",
-     4: "4",
-     5: "5"
+# Numeric measurements: DataID -> (SensorState field, multiplier).
+# Validated against dump.txt and the FTCAN 2.0 measure table. 16-bit values are
+# read as signed (two's complement) so temps / MAP can go negative.
+MEASURE_MAP = {
+    0x0001: ("tps", 0.1),
+    0x0002: ("map", 0.001),                 # bar (signed: vacuum is negative)
+    0x0003: ("air_temp", 0.1),
+    0x0004: ("engine_temp", 0.1),
+    0x0005: ("oil_pressure_bar", 0.001),
+    0x0006: ("fuel_pressure_bar", 0.001),
+    0x0007: ("water_pressure_bar", 0.001),
+    0x0009: ("battery", 0.01),              # volts (12.06 V from the dump)
+    0x000C: ("wheel_speed_fl_kmh", 1),
+    0x000D: ("wheel_speed_fr_kmh", 1),
+    0x000E: ("wheel_speed_rl_kmh", 1),
+    0x000F: ("wheel_speed_rr_kmh", 1),
+    0x0027: ("lambda_afr", 0.001),          # general Exhaust O2 (from the wideband)
+    0x0042: ("rpm", 1),
+    0x008C: ("oil_temp", 0.1),
 }
 
-def parse_0x14080600(data: bytes):
-    tps, map, air_temp, engine_temp = struct.unpack(">4h", data[:8])
-    return {
-        "tps":                tps * 0.1, 
-        "map":                map * 0.001,
-        "air_temp":           air_temp * 0.1, 
-        "engine_temp":        engine_temp * 0.1, 
-    }
+# Status / special DataIDs handled below in _apply().
+DATAID_GEAR = 0x0011        # signed gear (Note 2)
+DATAID_LAUNCH = 0x0008      # ECU launch mode (2-step / 3-step / burnout): nonzero = armed
+DATAID_DAYNIGHT = 0x007D    # day/night (tentative — verify live; 1 = night)
 
-def parse_0x14080601(data: bytes):
-    oil_pressure, fuel_pressure, water_pressure, gear = struct.unpack(">4h", data[:8])
-    return {
-        "oil_pressure_bar":   oil_pressure * 0.001,
-        "fuel_pressure_bar":  fuel_pressure * 0.001,
-        "water_pressure_bar": water_pressure * 0.001,
-        "gear":               gear,
-        "gear_label":         GEAR_LABEL.get(gear, str(gear)),
-    }
+GEAR_LABEL = {-2: "P", -1: "R", 0: "N", 1: "1", 2: "2", 3: "3", 4: "4", 5: "5", 6: "6"}
 
-def parse_0x14080602(data: bytes):
-    o2, rpm, oil_tmep, pit = struct.unpack(">4h", data[:8])
-    return {
-        "lambda":             o2 * 0.001,
-        "rpm":                int(rpm),
-        "oil_temp":         oil_tmep * 0.1,
-        "pit_limit":          (pit != 0),
-    }
 
-def parse_0x14080603(data: bytes):
-    fr, fl, rr, rl = struct.unpack(">4h", data[:8])
-    return {
-        "wheel_speed_fr_kmh": int(fr),
-        "wheel_speed_fl_kmh": int(fl),
-        "wheel_speed_rr_kmh": int(rr),
-        "wheel_speed_rl_kmh": int(rl),
-    }
+def _signed(v):
+    return v - 65536 if v >= 32768 else v
 
-PARSERS = {
-    MSG_TPS_MAP_TEMPS:   parse_0x14080600,
-    MSG_PRESSURES_GEAR:  parse_0x14080601,
-    MSG_O2_RPM_OILT_PIT: parse_0x14080602,
-    MSG_WHEEL_SPEEDS:    parse_0x14080603,
-}
 
-def read_can(interface="socketcan", channel="can0", print_fast=False, state=None):
+def _pairs(payload, out):
+    """Append (measure_id, raw_value) for each 4-byte pair in the payload."""
+    for i in range(0, len(payload) - 3, 4):
+        mid = (payload[i] << 8) | payload[i + 1]
+        val = (payload[i + 2] << 8) | payload[i + 3]
+        if mid:
+            out.append((mid, val))
+
+
+def _decode(cid, data, seg):
+    """Decode one frame into a list of (measure_id, raw_value), reassembling
+    segmented FTCAN packets via the per-id `seg` buffer."""
+    out = []
+    if not data:
+        return out
+    data_field_id = (cid >> 11) & 0x7
+    if data_field_id == 0x00:                  # standard CAN
+        _pairs(bytes(data), out)
+    else:                                       # FTCAN (0x02 / 0x03 bridge)
+        b0 = data[0]
+        if b0 == 0xFF:                          # single packet
+            _pairs(bytes(data[1:]), out)
+        elif b0 == 0x00:                        # segment 0: total length + payload start
+            total = (data[1] << 8) | data[2]
+            seg[cid] = [total, bytearray(data[3:])]
+        elif cid in seg:                        # continuation segment
+            seg[cid][1] += bytes(data[1:])
+            total, buf = seg[cid]
+            if len(buf) >= total:
+                _pairs(bytes(buf[:total]), out)
+                del seg[cid]
+    return out
+
+
+def _apply(state, measures):
+    """Map decoded measures into a SensorState update (stamps the CAN clock)."""
+    updates = {}
+    for mid, raw in measures:
+        did = mid >> 1
+        val = _signed(raw)
+        if did in MEASURE_MAP:
+            field, scale = MEASURE_MAP[did]
+            updates[field] = val * scale
+        elif did == DATAID_GEAR:
+            updates["gear"] = val
+            updates["gear_label"] = GEAR_LABEL.get(val, str(val))
+        elif did == DATAID_LAUNCH:
+            updates["two_step"] = (val != 0)
+        elif did == DATAID_DAYNIGHT:
+            updates["night"] = (val == 1)
+    if updates:
+        state.update(updates)
+
+
+def read_can(interface="socketcan", channel="can0", state=None):
     if state is None:
         state = SensorState()
-    print("Starting FTCAN 2.0 simplified listener on", channel)
+    print("Starting FTCAN 2.0 tagged-broadcast listener on", channel, flush=True)
 
-    # Filters: only the simplified frames we care about (extended IDs)
-    filters = [{"can_id": mid, "can_mask": 0x1FFFFFFF, "extended": True} for mid in PARSERS]
-    bus = can.Bus(interface=interface, channel=channel, receive_own_messages=False, can_filters=filters)
-
-    # Optional rolling buffers if you want "fast" prints without flooding
-    last_lines = deque(maxlen=1)
-
+    # Real-time broadcast frames have a low byte of 0xFF (any FuelTech device).
+    filters = [{"can_id": 0x000000FF, "can_mask": 0x000000FF, "extended": True}]
+    bus = can.Bus(interface=interface, channel=channel,
+                  receive_own_messages=False, can_filters=filters)
+    seg = {}
     try:
         while True:
             msg = bus.recv(timeout=1.0)
@@ -91,54 +126,21 @@ def read_can(interface="socketcan", channel="can0", print_fast=False, state=None
                 continue
             if not msg.is_extended_id:
                 continue
-            parser = PARSERS.get(msg.arbitration_id)
-            if not parser:
-                continue
-
-            parsed = parser(msg.data)
-            state.update(parsed)
-
-            if print_fast:
-                # Minimal “fast path” print for RPM and a vehicle speed estimation.
-                # Vehicle speed = average of the 4 wheel speeds.
-                rpm = state.rpm
-                wheels = [state.wheel_speed_fr_kmh,
-                          state.wheel_speed_fl_kmh,
-                          state.wheel_speed_rr_kmh,
-                          state.wheel_speed_rl_kmh]
-                veh_kmh = round(sum(wheels) / len(wheels), 1)
-
-                line = f"RPM={rpm}  Speed≈{veh_kmh} km/h"
-                if not last_lines or last_lines[-1] != line:
-                    print(line)
-                    last_lines.append(line)
-
+            _apply(state, _decode(msg.arbitration_id, msg.data, seg))
     except KeyboardInterrupt:
         print("\nStopped.")
     finally:
         bus.shutdown()
 
-# --- Real-time tagged broadcast logger (discovery: fan, 2-step, ECU outputs) -----
-# The full FTCAN real-time broadcast (MessageID 0x_FF, i.e. frame low byte 0xFF)
-# tags every measure with a MeasureID = (DataID << 1) | status_bit. We don't
-# consume it yet — this just logs frames (raw + a best-effort single-packet decode)
-# so signals like the fan output and 2-step can be identified on the bench.
-RT_NAMES = {
-    0x0001: "TPS", 0x0002: "MAP", 0x0003: "AirTemp", 0x0004: "EngineTemp",
-    0x0005: "OilPress", 0x0006: "WaterPress", 0x0007: "LaunchMode/2step",
-    0x0008: "Battery", 0x0011: "Gear", 0x0042: "RPM", 0x0048: "2StepSignal",
-}
+
+# --- Discovery logger: dump unmapped real-time measures (find fan, day/night) ---
+RT_NAMES = {did: f[0] for did, f in MEASURE_MAP.items()}
+RT_NAMES.update({DATAID_GEAR: "gear", DATAID_LAUNCH: "launch/2step", DATAID_DAYNIGHT: "day/night?"})
 
 
 def log_realtime(interface="socketcan", channel="can0"):
-    """Log the FTCAN real-time tagged broadcast for signal discovery (tag: [canrt]).
-
-    Opens its own socket (socketcan multiplexes, so it runs alongside read_can),
-    and logs each frame's raw bytes when they change (rate-limited per ID), plus a
-    decode of single-packet measures (DataID = value). Segmented frames are logged
-    raw so they can be reassembled offline.
-    """
-    filters = [{"can_id": 0xFF, "can_mask": 0xFF, "extended": True}]
+    """Log real-time broadcast measures on change (tag: [canrt]) for discovery."""
+    filters = [{"can_id": 0x000000FF, "can_mask": 0x000000FF, "extended": True}]
     try:
         bus = can.Bus(interface=interface, channel=channel,
                       receive_own_messages=False, can_filters=filters)
@@ -146,47 +148,23 @@ def log_realtime(interface="socketcan", channel="can0"):
         print("[canrt] could not open bus:", e, flush=True)
         return
     print("[canrt] real-time broadcast logger on", channel, flush=True)
-    last = {}  # arbitration_id -> (raw bytes, monotonic time)
+    seg, last = {}, {}
     try:
         while True:
             msg = bus.recv(timeout=1.0)
             if msg is None:
                 continue
-            raw = bytes(msg.data)
-            now = time.monotonic()
-            prev = last.get(msg.arbitration_id)
-            if prev and prev[0] == raw and now - prev[1] < 1.5:
-                continue  # unchanged and logged recently -> skip
-            last[msg.arbitration_id] = (raw, now)
-            hexd = " ".join(f"{b:02X}" for b in raw)
-            decoded = ""
-            if raw[:1] == b"\xff":  # single packet: 0xFF + MeasureID(2)+Value(2)...
-                for i in range(1, len(raw) - 3, 4):
-                    mid = (raw[i] << 8) | raw[i + 1]
-                    val = (raw[i + 2] << 8) | raw[i + 3]
-                    if mid == 0:
-                        continue
-                    did = mid >> 1
-                    name = RT_NAMES.get(did, "")
-                    tag = "status" if (mid & 1) else "value"
-                    decoded += f" | 0x{did:04X}{('(' + name + ')') if name else ''} {tag}={val}"
-            print(f"[canrt] id=0x{msg.arbitration_id:08X} [{len(raw)}] {hexd}{decoded}", flush=True)
+            for mid, raw in _decode(msg.arbitration_id, msg.data, seg):
+                did = mid >> 1
+                now = time.monotonic()
+                prev = last.get(did)
+                if prev and prev[0] == raw and now - prev[1] < 1.5:
+                    continue
+                last[did] = (raw, now)
+                name = RT_NAMES.get(did, "")
+                print(f"[canrt] DataID=0x{did:04X} {name} = {_signed(raw)} (0x{raw:04X})",
+                      flush=True)
     except Exception as e:
         print("[canrt] error:", e, flush=True)
     finally:
         bus.shutdown()
-
-
-from concurrent.futures import ThreadPoolExecutor
-if __name__ == "__main__":
-    state = SensorState()
-
-    def print_can(recv):
-        while True:
-            print('RPM:', recv.rpm)
-            time.sleep(0.1)
-
-    with ThreadPoolExecutor(max_workers=2, thread_name_prefix="ftcan") as ex:
-        fut_reader   = ex.submit(read_can, state=state)
-        fut_consumer = ex.submit(print_can, recv=state)
-

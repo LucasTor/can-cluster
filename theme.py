@@ -39,6 +39,10 @@ LAMBDA_RICH = (1.000, 0.541, 0.302, 1.0)   # #ff8a4d
 LAMBDA_LEAN = (1.000, 0.819, 0.302, 1.0)   # #ffd14d
 LAMBDA_STOICH = (0.498, 0.839, 0.639, 1.0)  # #7fd6a3
 
+# critical alarm banner (lean / overheat / oil pressure)
+ALARM_BG = (0.86, 0.07, 0.05, 1.0)         # vivid red banner
+ALARM_TEXT = (1.0, 1.0, 1.0, 1.0)          # white alarm text
+
 # minimal gauge styling (Azul Boreal accent leans heavier on the blue)
 GAUGE_FACE = (0.063, 0.082, 0.122, 1.0)    # dark blue-tinted dial face
 GAUGE_RING = (0.353, 0.651, 0.918, 0.28)   # blue disc edge ring

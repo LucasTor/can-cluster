@@ -28,7 +28,7 @@ from kivy.clock import Clock
 from kivy.core.window import Window
 from kivy.core.text import LabelBase, DEFAULT_FONT
 
-from widgets import CenterInfo, Gauge, TopAlerts
+from widgets import CenterInfo, Gauge, TopAlerts, AlarmBar, NightDim
 from model import SensorState
 from demo import simulate
 
@@ -81,6 +81,12 @@ RPM_GAUGE_CONFIG = {
 # Shift light: flash the RPM gauge above this engine speed
 SHIFT_RPM_THRESHOLD = 6000
 
+# Critical alarm thresholds (the bottom red banner)
+ALARM_LEAN_LAMBDA = 1.05       # lean mixture
+ALARM_OVERHEAT_C = 110         # coolant overheat
+ALARM_OIL_PRESS_BAR = 1.0      # minimum oil pressure...
+ALARM_OIL_PRESS_RPM = 1500     # ...only checked above this rpm (idle runs lower)
+
 # After this many seconds with no CAN frame, run the animated demo loop so the
 # cluster shows live values on a bench / when not connected to the car.
 NO_CAN_DEMO_DELAY = 3.0
@@ -113,6 +119,8 @@ class Dashboard(Widget):
         self._setup_gauges()
         self._setup_center_info()
         self._setup_top_alerts()
+        self._setup_night_dim()
+        self._setup_alarms()
 
         if DEV:
             Window.size = (WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2)
@@ -135,6 +143,16 @@ class Dashboard(Widget):
         self.top_alerts = TopAlerts()
         self.add_widget(self.top_alerts)
 
+    def _setup_night_dim(self):
+        """Night dimming veil (below the alarm banner so alarms stay bright)."""
+        self.night_dim = NightDim()
+        self.add_widget(self.night_dim)
+
+    def _setup_alarms(self):
+        """Critical alarm banner (bottom). Added last so it sits on top."""
+        self.alarm_bar = AlarmBar()
+        self.add_widget(self.alarm_bar)
+
     def update(self, state):
         """
         Update all dashboard displays from the shared sensor state.
@@ -155,9 +173,26 @@ class Dashboard(Widget):
             lambda_val=state.lambda_afr,
             boost_bar=state.map,  # signed: shows vacuum (−) and boost (+)
             fuel_level=state.fuel_level,
+            fuel_press_bar=state.fuel_pressure_bar,
+            gear=state.gear_label,
         )
 
         self.top_alerts.set_state(state)
+        self.night_dim.set_night(state.night)
+        self.alarm_bar.set_alarms(self._alarms(state))
+
+    @staticmethod
+    def _alarms(state):
+        """Active critical alarms for the bottom banner."""
+        alarms = []
+        if state.lambda_afr > ALARM_LEAN_LAMBDA:
+            alarms.append("LEAN")
+        if state.engine_temp > ALARM_OVERHEAT_C:
+            alarms.append("OVERHEAT")
+        # low oil pressure, but only above idle (idle naturally runs lower)
+        if state.rpm > ALARM_OIL_PRESS_RPM and state.oil_pressure_bar < ALARM_OIL_PRESS_BAR:
+            alarms.append("OIL PRESSURE")
+        return alarms
 
 
 # ============================================================================
