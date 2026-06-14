@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import can
+import time
 import struct
 from collections import deque
 
@@ -117,8 +118,66 @@ def read_can(interface="socketcan", channel="can0", print_fast=False, state=None
     finally:
         bus.shutdown()
 
+# --- Real-time tagged broadcast logger (discovery: fan, 2-step, ECU outputs) -----
+# The full FTCAN real-time broadcast (MessageID 0x_FF, i.e. frame low byte 0xFF)
+# tags every measure with a MeasureID = (DataID << 1) | status_bit. We don't
+# consume it yet — this just logs frames (raw + a best-effort single-packet decode)
+# so signals like the fan output and 2-step can be identified on the bench.
+RT_NAMES = {
+    0x0001: "TPS", 0x0002: "MAP", 0x0003: "AirTemp", 0x0004: "EngineTemp",
+    0x0005: "OilPress", 0x0006: "WaterPress", 0x0007: "LaunchMode/2step",
+    0x0008: "Battery", 0x0011: "Gear", 0x0042: "RPM", 0x0048: "2StepSignal",
+}
+
+
+def log_realtime(interface="socketcan", channel="can0"):
+    """Log the FTCAN real-time tagged broadcast for signal discovery (tag: [canrt]).
+
+    Opens its own socket (socketcan multiplexes, so it runs alongside read_can),
+    and logs each frame's raw bytes when they change (rate-limited per ID), plus a
+    decode of single-packet measures (DataID = value). Segmented frames are logged
+    raw so they can be reassembled offline.
+    """
+    filters = [{"can_id": 0xFF, "can_mask": 0xFF, "extended": True}]
+    try:
+        bus = can.Bus(interface=interface, channel=channel,
+                      receive_own_messages=False, can_filters=filters)
+    except Exception as e:
+        print("[canrt] could not open bus:", e, flush=True)
+        return
+    print("[canrt] real-time broadcast logger on", channel, flush=True)
+    last = {}  # arbitration_id -> (raw bytes, monotonic time)
+    try:
+        while True:
+            msg = bus.recv(timeout=1.0)
+            if msg is None:
+                continue
+            raw = bytes(msg.data)
+            now = time.monotonic()
+            prev = last.get(msg.arbitration_id)
+            if prev and prev[0] == raw and now - prev[1] < 1.5:
+                continue  # unchanged and logged recently -> skip
+            last[msg.arbitration_id] = (raw, now)
+            hexd = " ".join(f"{b:02X}" for b in raw)
+            decoded = ""
+            if raw[:1] == b"\xff":  # single packet: 0xFF + MeasureID(2)+Value(2)...
+                for i in range(1, len(raw) - 3, 4):
+                    mid = (raw[i] << 8) | raw[i + 1]
+                    val = (raw[i + 2] << 8) | raw[i + 3]
+                    if mid == 0:
+                        continue
+                    did = mid >> 1
+                    name = RT_NAMES.get(did, "")
+                    tag = "status" if (mid & 1) else "value"
+                    decoded += f" | 0x{did:04X}{('(' + name + ')') if name else ''} {tag}={val}"
+            print(f"[canrt] id=0x{msg.arbitration_id:08X} [{len(raw)}] {hexd}{decoded}", flush=True)
+    except Exception as e:
+        print("[canrt] error:", e, flush=True)
+    finally:
+        bus.shutdown()
+
+
 from concurrent.futures import ThreadPoolExecutor
-import time
 if __name__ == "__main__":
     state = SensorState()
 

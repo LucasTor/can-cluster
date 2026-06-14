@@ -1,8 +1,7 @@
 """Centralised colour palette and layout constants for the cluster UI.
 
 Every widget pulls its colours and shared dimensions from here so the whole
-cluster can be restyled in one place and the two centre-aligned widgets
-(``CenterInfo`` and ``ShiftCenterBanner``) can't drift out of sync.
+cluster can be restyled in one place.
 """
 
 # --- Colours (RGBA, 0..1) ---
@@ -13,9 +12,52 @@ DARK = (0.1, 0.1, 0.1, 1.0)              # dial face / inactive fill
 NEEDLE = (0.9882, 0.2471, 0.1490, 1.0)   # gauge needle
 INDICATOR_ON = (0.0, 1.0, 0.0, 1.0)      # turn indicator active (green)
 INDICATOR_OFF = (0.1, 0.1, 0.1, 1.0)     # turn indicator inactive
-SHIFT_FILL = (1.0, 1.0, 0.0, 1.0)        # shift banner background (yellow)
-SHIFT_TEXT = (1.0, 0.0, 0.0, 1.0)        # shift banner text (red)
 REDLINE = (1.0, 0.0, 0.0, 0.5)           # gauge redline arc
+
+# --- Minimal "Painel Gol" theme (dark, Azul Boreal accent) ---
+BG = (0.039, 0.043, 0.051, 1.0)          # #0a0b0d page background
+TEXT = (0.925, 0.933, 0.949, 1.0)        # #eceef2 primary text
+VALUE = (1.0, 1.0, 1.0, 0.82)            # default readout value
+LABEL_DIM = (0.353, 0.651, 0.918, 0.70)  # micro-grid labels (accent)
+LABEL_ACCENT = (0.353, 0.651, 0.918, 0.95)  # big section labels (BOOST/LAMBDA)
+UNIT_DIM = (0.353, 0.651, 0.918, 0.45)   # units / tags under big values
+HAIRLINE = (0.353, 0.651, 0.918, 0.28)   # thin divider lines (accent)
+BOOST_NORMAL = (0.420, 0.706, 0.945, 1.0)  # Azul Boreal boost (in range)
+
+# tell-tale (top alert) colours, by ISO convention
+TT_GREEN = (0.200, 0.819, 0.478, 1.0)    # #33d17a turn signals
+TT_BLUE = (0.353, 0.651, 0.918, 1.0)     # #5aa6ea high beam
+TT_RED = (1.000, 0.353, 0.271, 1.0)      # #ff5a45 oil / batt / temp / brake
+TT_AMBER = (1.000, 0.690, 0.180, 1.0)    # #ffb02e cel / fuel
+TT_CYAN = (0.133, 0.827, 0.933, 1.0)     # #22d3ee 2-step
+TT_BOOST = (1.000, 0.231, 0.188, 1.0)    # #ff3b30 over-boost
+PILL_OFF_BORDER = (1.0, 1.0, 1.0, 0.06)  # tell-tale outline when inactive
+PILL_OFF_TEXT = (1.0, 1.0, 1.0, 0.10)    # tell-tale label when inactive
+
+# lambda value colours
+LAMBDA_RICH = (1.000, 0.541, 0.302, 1.0)   # #ff8a4d
+LAMBDA_LEAN = (1.000, 0.819, 0.302, 1.0)   # #ffd14d
+LAMBDA_STOICH = (0.498, 0.839, 0.639, 1.0)  # #7fd6a3
+
+# minimal gauge styling (Azul Boreal accent leans heavier on the blue)
+GAUGE_FACE = (0.063, 0.082, 0.122, 1.0)    # dark blue-tinted dial face
+GAUGE_RING = (0.353, 0.651, 0.918, 0.28)   # blue disc edge ring
+GAUGE_TICK = (0.667, 0.804, 0.945, 0.92)   # major ticks (cool white-blue)
+GAUGE_TICK_MINOR = (0.353, 0.651, 0.918, 0.28)  # minor ticks (faint blue)
+GAUGE_NUM = (0.700, 0.820, 0.945, 0.62)    # dial numerals (cool)
+GAUGE_ARC = (0.353, 0.651, 0.918, 0.85)    # bold progress arc (Azul Boreal)
+GAUGE_NEEDLE = (0.353, 0.651, 0.918, 1.0)  # #5aa6ea needle
+GAUGE_REDLINE = (1.0, 0.353, 0.314, 0.85)  # softer redline arc
+GAUGE_SHIFT = (1.0, 0.824, 0.227, 1.0)     # #ffd23a shift-flash arc/needle (amber)
+GAUGE_SHIFT_TEXT = (1.0, 0.231, 0.188, 1.0)  # #ff3b30 "SHIFT!" text (red)
+GAUGE_SHIFT_FLASH = (1.0, 0.094, 0.063, 1.0)  # red disc wash strobed during shift
+GAUGE_CENTER = (0.949, 0.957, 0.973, 1.0)  # #f2f4f8 centre digit
+GAUGE_SUB = (0.353, 0.651, 0.918, 0.85)    # SPEED / RPM sub-label (accent)
+GAUGE_UNIT = (0.353, 0.651, 0.918, 0.40)   # km/h / x1000 unit (faint accent)
+
+# fonts (paths are usable directly as Kivy `font_name`)
+FONT_MONO = "fonts/ShareTechMono-Regular.ttf"   # labels / units
+FONT_LIGHT = "fonts/Compagnon-Light.otf"        # big numerals (light weight)
 
 # --- Window ---
 WINDOW_WIDTH = 1920

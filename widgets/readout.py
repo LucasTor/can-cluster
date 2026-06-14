@@ -1,26 +1,26 @@
-"""Reusable title + value readout whose colour flips to a warning colour.
+"""Reusable value readout whose colour reflects a threshold.
 
-Used by ``CenterInfo`` for both the compact rows and the big tiles. The Label
-widgets are owned by the caller; ``Readout`` only drives their text and colour
-so the "format a value, turn it red past a threshold" pattern lives in one
-place instead of being re-implemented per field.
+Drives a value Label's text and colour from a sensor reading: the value turns
+``warn_color`` when ``warn(value)`` is true, otherwise ``base_color``. The
+accompanying title label is static (the caller sets it once), matching the
+minimal design where only the value reacts.
 """
 
-from theme import FG, WARNING
+from theme import VALUE, WARNING
 
 
 class Readout:
-    def __init__(self, title_label, value_label, fmt="{:.0f}", warn=None):
-        self.title = title_label
+    def __init__(self, value_label, fmt="{:.0f}", warn=None,
+                 base_color=VALUE, warn_color=WARNING):
         self.value = value_label
         self.fmt = fmt
         self.warn = warn or (lambda v: False)
+        self.base_color = base_color
+        self.warn_color = warn_color
 
     def set(self, value):
         """Update the displayed value; ``None`` leaves the readout unchanged."""
         if value is None:
             return
         self.value.text = self.fmt.format(value)
-        color = WARNING if self.warn(value) else FG
-        self.value.color = color
-        self.title.color = color
+        self.value.color = self.warn_color if self.warn(value) else self.base_color

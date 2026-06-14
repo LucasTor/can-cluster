@@ -5,9 +5,10 @@ Main application file for the car cluster display system.
 """
 
 import os
+import time
 from kivy.config import Config
 
-from theme import WINDOW_WIDTH, WINDOW_HEIGHT
+from theme import WINDOW_WIDTH, WINDOW_HEIGHT, BG
 
 # Development mode flag
 DEV = os.environ.get('DEV', 'true').lower() == 'true'
@@ -27,18 +28,15 @@ from kivy.clock import Clock
 from kivy.core.window import Window
 from kivy.core.text import LabelBase, DEFAULT_FONT
 
-from widgets import CenterInfo, Gauge, TurnIndicator, ShiftCenterBanner
+from widgets import CenterInfo, Gauge, TopAlerts
 from model import SensorState
+from demo import simulate
 
 kivy.require("2.0.0")
 
 # ============================================================================
 # Configuration Constants
 # ============================================================================
-
-# Shift banner dimensions
-SHIFT_BANNER_WIDTH = 450
-SHIFT_BANNER_HEIGHT = 600
 
 # Gauge configuration
 SPEED_GAUGE_CONFIG = {
@@ -52,6 +50,12 @@ SPEED_GAUGE_CONFIG = {
     'angle_range': 270,
 }
 
+def _rpm_text(v):
+    """Full number below 1000 rpm, compact 'x.xk' at/above 1000."""
+    v = int(v)
+    return str(v) if v < 1000 else f"{v / 1000:.1f}k"
+
+
 RPM_GAUGE_CONFIG = {
     'title': "RPM",
     'subtitle': "X1000",
@@ -61,6 +65,7 @@ RPM_GAUGE_CONFIG = {
     'pos': (1260, 60),
     'ticks': 9,
     'redline_from': 5500,
+    'value_formatter': _rpm_text,
     'label_map': {
         1000: "1",
         2000: "2",
@@ -73,33 +78,23 @@ RPM_GAUGE_CONFIG = {
     },
 }
 
-# Turn indicator positions
-LEFT_INDICATOR_POS = (635, 560)
-RIGHT_INDICATOR_POS = (1185, 560)
-INDICATOR_SIZE = (100, 100)
-
-# Shift banner configuration
+# Shift light: flash the RPM gauge above this engine speed
 SHIFT_RPM_THRESHOLD = 6000
-SHIFT_BLINK_HZ = 5
 
-# Keyboard controls
-KEY_UP_ARROW = 273
+# After this many seconds with no CAN frame, run the animated demo loop so the
+# cluster shows live values on a bench / when not connected to the car.
+NO_CAN_DEMO_DELAY = 3.0
 
-# Keyboard demo (dev mode): synthetic rev/speed while the up arrow is held
-DEMO_ACCEL_RPM_PER_S = 3000
-DEMO_COAST_RPM_PER_S = 2000
-DEMO_ACCEL_KMH_PER_S = 60
-DEMO_COAST_KMH_PER_S = 30
-DEMO_IDLE_RPM = 1000
-DEMO_MAX_RPM = 8000
-DEMO_MAX_KMH = 240
+# Start rendering live data once the gauges' startup sweep has finished.
+RENDER_START_DELAY = 5.0
 
 # ============================================================================
 # Application Setup
 # ============================================================================
 
 
-Window.show_fps = True
+Window.show_fps = False
+Window.clearcolor = BG  # near-black background for the minimal look
 
 # Register custom font
 LabelBase.register(DEFAULT_FONT, "fonts/Compagnon-Medium.otf")
@@ -115,18 +110,12 @@ class Dashboard(Widget):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        self.accelerating = False
-        self.hazard_on = False
-
         self._setup_gauges()
         self._setup_center_info()
-        self._setup_turn_indicators()
-        self._setup_shift_banner()
+        self._setup_top_alerts()
 
         if DEV:
             Window.size = (WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2)
-
-        Clock.schedule_once(lambda x: self._setup_keyboard_triggers(), 3)
 
     def _setup_gauges(self):
         """Initialize speed and RPM gauges."""
@@ -141,33 +130,10 @@ class Dashboard(Widget):
         self.center_info = CenterInfo()
         self.add_widget(self.center_info)
 
-    def _setup_turn_indicators(self):
-        """Initialize left and right turn indicators."""
-        self.left_indicator = TurnIndicator(
-            side='left',
-            size=INDICATOR_SIZE,
-            pos=LEFT_INDICATOR_POS
-        )
-        self.right_indicator = TurnIndicator(
-            side='right',
-            size=INDICATOR_SIZE,
-            pos=RIGHT_INDICATOR_POS
-        )
-        self.add_widget(self.left_indicator)
-        self.add_widget(self.right_indicator)
-
-    def _setup_shift_banner(self):
-        """Initialize shift indicator banner."""
-        self.shift_overlay = ShiftCenterBanner(
-            shift_rpm=SHIFT_RPM_THRESHOLD,
-            blink_hz=SHIFT_BLINK_HZ
-        )
-        self.add_widget(self.shift_overlay)
-
-    def _setup_keyboard_triggers(self):
-        """Set up keyboard event handlers."""
-        Window.bind(on_key_down=self.on_key_down)
-        Window.bind(on_key_up=self.on_key_up)
+    def _setup_top_alerts(self):
+        """Initialize the top tell-tale alert row (turn signals, warnings, etc.)."""
+        self.top_alerts = TopAlerts()
+        self.add_widget(self.top_alerts)
 
     def update(self, state):
         """
@@ -180,30 +146,18 @@ class Dashboard(Widget):
         self.rpm_gauge.update_value(state.rpm)
         self.speed_gauge.update_value(state.wheel_speed_fl_kmh)
 
-        self.shift_overlay.set_rpm(state.rpm)
+        self.rpm_gauge.set_shift(state.rpm >= SHIFT_RPM_THRESHOLD)
 
         self.center_info.set_values(
             intake_c=state.air_temp,
             water_c=state.engine_temp,
             oil_press_bar=state.oil_pressure_bar,
             lambda_val=state.lambda_afr,
-            boost_bar=max(state.map, 0),
+            boost_bar=state.map,  # signed: shows vacuum (−) and boost (+)
             fuel_level=state.fuel_level,
         )
 
-        self.right_indicator.set_active(state.io.right_indicator)
-        self.left_indicator.set_active(state.io.left_indicator)
-
-    def on_key_down(self, window, key, scancode, codepoint, modifiers):
-        """Handle key press events."""
-        print(key)
-        if key == KEY_UP_ARROW:
-            self.accelerating = True
-
-    def on_key_up(self, window, key, scancode):
-        """Handle key release events."""
-        if key == KEY_UP_ARROW:
-            self.accelerating = False
+        self.top_alerts.set_state(state)
 
 
 # ============================================================================
@@ -217,6 +171,7 @@ class CarClusterApp(App):
         super().__init__()
         self.state = state or SensorState()
         self.dashboard = None
+        self._demo_t0 = None  # monotonic time the demo loop engaged
 
     def build(self):
         """Build and return the main dashboard widget."""
@@ -224,37 +179,40 @@ class CarClusterApp(App):
         return self.dashboard
 
     def on_start(self):
-        """Start the render loop (plus the keyboard demo source in dev mode)."""
-        def start_update(_):
-            Clock.schedule_interval(self.update_values, 1 / 30)
-            if DEV:
-                # No CAN bus on a desktop — let the up-arrow key feed synthetic
-                # data into the same state the render loop reads.
-                Clock.schedule_interval(self._demo_step, 1 / 60)
-        Clock.schedule_once(start_update, 3)
+        """Start the render loop once the gauges have finished their intro sweep."""
+        Clock.schedule_once(
+            lambda _: Clock.schedule_interval(self.update_values, 1 / 30), RENDER_START_DELAY
+        )
 
     def update_values(self, _):
-        """Update dashboard with current data."""
-        if self.dashboard:
-            self.dashboard.update(self.state)
-
-    def _demo_step(self, dt):
-        """Advance synthetic RPM/speed from the up-arrow accelerator (dev only).
-
-        Acts as a stand-in CAN source: it mutates the same ``SensorState`` the
-        render loop reads, so holding the up arrow revs the engine and the whole
-        cluster (gauges, shift banner) responds exactly as it would to real data.
-        """
-        if self.dashboard and self.dashboard.accelerating:
-            self.state.rpm = min(self.state.rpm + DEMO_ACCEL_RPM_PER_S * dt, DEMO_MAX_RPM)
-            self.state.wheel_speed_fl_kmh = min(
-                self.state.wheel_speed_fl_kmh + DEMO_ACCEL_KMH_PER_S * dt, DEMO_MAX_KMH
-            )
+        """Render the current state, falling back to the demo loop with no CAN."""
+        if not self.dashboard:
+            return
+        if self.state.since_can() > NO_CAN_DEMO_DELAY:
+            self._run_demo()
         else:
-            self.state.rpm = max(self.state.rpm - DEMO_COAST_RPM_PER_S * dt, DEMO_IDLE_RPM)
-            self.state.wheel_speed_fl_kmh = max(
-                self.state.wheel_speed_fl_kmh - DEMO_COAST_KMH_PER_S * dt, 0
-            )
+            self._demo_t0 = None
+        self.dashboard.update(self.state)
+
+    def _run_demo(self):
+        """Feed the animated simulation into the state when no CAN is present.
+
+        Writes only engine/CAN-derived fields (not GPIO inputs) directly into the
+        state — bypassing ``update()`` so it doesn't reset the CAN-activity clock.
+        Real CAN frames take over automatically the moment they arrive.
+        """
+        if self._demo_t0 is None:
+            self._demo_t0 = time.monotonic()
+        vals = simulate(time.monotonic() - self._demo_t0)
+        s = self.state
+        s.rpm = vals["rpm"]
+        s.wheel_speed_fl_kmh = vals["speed"]
+        s.map = vals["map"]
+        s.lambda_afr = vals["lambda_afr"]
+        s.engine_temp = vals["engine_temp"]
+        s.air_temp = vals["air_temp"]
+        s.oil_pressure_bar = vals["oil"]
+        s.fuel_level = vals["fuel"]
 
 
 def run_cluster(state):

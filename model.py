@@ -6,6 +6,7 @@ of a bare dict of magic string keys) makes the producer/consumer contract
 explicit and turns key typos into attribute errors instead of silent misses.
 """
 
+import time
 from dataclasses import dataclass, field, fields
 from threading import Lock
 
@@ -16,7 +17,8 @@ class IoState:
 
     left_indicator: bool = False
     right_indicator: bool = False
-    headlights: bool = False
+    high_beam: bool = False
+    parking_brake: bool = False
 
     def update(self, values):
         """Merge a ``{pin_name: bool}`` mapping; unknown pins are ignored."""
@@ -41,6 +43,8 @@ class SensorState:
     gear: int = 0
     gear_label: str = "N"
     pit_limit: bool = False
+    two_step: bool = False       # launch control / 2-step active (FTCAN launch mode)
+    radiator_fan: bool = False   # cooling fan output on
     fuel_level: float = 0.0      # %
     # wheel speeds (km/h)
     wheel_speed_fr_kmh: float = 0.0
@@ -52,6 +56,7 @@ class SensorState:
 
     def __post_init__(self):
         self._lock = Lock()
+        self._last_can = 0.0  # monotonic time of the last CAN frame (0 = never)
 
     def update(self, values):
         """Merge a partial mapping (e.g. a decoded CAN frame) into the state.
@@ -59,12 +64,20 @@ class SensorState:
         Unknown keys are ignored. The CAN parser's ``lambda`` key is mapped to
         ``lambda_afr`` since ``lambda`` is a reserved word. The whole merge is
         applied under a lock so the dashboard never reads a half-updated frame.
+        Also stamps the CAN-activity clock (see ``since_can``).
         """
         with self._lock:
             for key, value in values.items():
                 attr = _KEY_ALIASES.get(key, key)
                 if attr in _SCALAR_FIELDS:
                     setattr(self, attr, value)
+        self._last_can = time.monotonic()
+
+    def since_can(self):
+        """Seconds since the last CAN frame (``inf`` if none received yet)."""
+        if not self._last_can:
+            return float("inf")
+        return time.monotonic() - self._last_can
 
 
 _KEY_ALIASES = {"lambda": "lambda_afr"}
