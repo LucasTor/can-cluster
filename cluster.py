@@ -171,7 +171,7 @@ class Dashboard(Widget):
             water_c=state.engine_temp,
             oil_press_bar=state.oil_pressure_bar,
             lambda_val=state.lambda_afr,
-            boost_bar=state.map,  # signed: shows vacuum (−) and boost (+)
+            boost_bar=max(0.0, state.map),  # boost only; vacuum clamps to 0.00
             fuel_level=state.fuel_level,
             fuel_press_bar=state.fuel_pressure_bar,
             gear=state.gear_label,

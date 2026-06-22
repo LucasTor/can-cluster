@@ -18,7 +18,7 @@ from kivy.graphics import Color, Rectangle
 
 from theme import (
     FONT_MONO, VALUE, LABEL_DIM, LABEL_ACCENT, UNIT_DIM, HAIRLINE,
-    TEXT, BOOST_NORMAL, TT_RED, TT_AMBER, CARD_WIDTH, CARD_HEIGHT,
+    BOOST_NORMAL, TT_RED, TT_AMBER, CARD_WIDTH, CARD_HEIGHT,
     WINDOW_HEIGHT,
 )
 from .readout import Readout
@@ -70,8 +70,9 @@ class CenterInfo(Widget):
         self.boost_value = self._big_block("BOOST", "BAR")
         self.vbox.add_widget(self._hairline())
 
-        # --- big LAMBDA ---
-        self.lambda_value, self.lambda_tag = self._big_block("LAMBDA", "STOICH", with_ref=True)
+        # --- big LAMBDA --- (starts at stoich 1.00, blue)
+        self.lambda_value, self.lambda_tag = self._big_block(
+            "LAMBDA", "STOICH", initial="1.00", with_ref=True)
 
         self.bind(pos=self._sync, size=self._sync)
         Window.bind(on_resize=lambda *_: self._reposition())
@@ -101,14 +102,16 @@ class CenterInfo(Widget):
         self.readouts[key] = Readout(value, **kw)
         return cell
 
-    def _big_block(self, title, unit, with_ref=False):
+    def _big_block(self, title, unit, initial="0.00", with_ref=False):
         # The value sizes to its own rendered glyphs (never clipped). Title and
         # unit are placed just outside the visible digits using a fraction of the
         # value's *rendered* glyph height — that fraction scales with font/density
         # so the spacing is identical on the dev Mac and the Pi.
+        # Starts in the accent blue so it matches the gauges during the intro
+        # sweep (before any data arrives), rather than flashing white first.
         block = FloatLayout(size_hint=(1, None), height=200)
-        value = Label(text="0.00", bold=True, font_size=BIG_VALUE_FONT,
-                      color=TEXT, size_hint=(None, None))
+        value = Label(text=initial, bold=True, font_size=BIG_VALUE_FONT,
+                      color=BOOST_NORMAL, size_hint=(None, None))
         name = Label(text=title, font_name=FONT_MONO, font_size="30sp",
                      color=LABEL_ACCENT, size_hint=(None, None))
         sub = Label(text=unit, font_name=FONT_MONO, font_size="16sp",
@@ -173,8 +176,7 @@ class CenterInfo(Widget):
             self.gear_value.text = str(gear)
 
         if boost_bar is not None:
-            sign = "+" if boost_bar >= 0 else "−"
-            self.boost_value.text = f"{sign}{abs(boost_bar):.2f}"
+            self.boost_value.text = f"{boost_bar:.2f}"
             self.boost_value.color = TT_RED if boost_bar > 1.32 else BOOST_NORMAL
 
         if lambda_val is not None:
