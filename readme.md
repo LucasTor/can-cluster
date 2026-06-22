@@ -12,11 +12,20 @@ no-box centre readout, and tell-tale "pills" that stay dark until they have some
 
 ## Hardware
 
-- Raspberry Pi 5 running **Armbian** (Debian bookworm), displaying full-screen via Kivy on
+- **Raspberry Pi 5** running **Armbian** (Debian bookworm), displaying full-screen via Kivy on
   SDL2 / KMS-DRM (no desktop environment).
 - A 10.3" **1920×720** display.
-- **FuelTech ECU** on the CAN bus (`can0`, socketcan), broadcasting FTCAN 2.0.
-- Dashboard switches (turn signals, high beam, parking brake, …) wired to the Pi's **GPIO**.
+- A **CANable V2.0 Pro** USB↔CAN adapter (socketcan, `can0`) connecting the Pi to the
+  **FuelTech ECU**, which broadcasts FTCAN 2.0.
+- An **8-channel optocoupler board** isolating the car's dashboard switches (turn signals, high
+  beam, parking brake, …) before they reach the Pi's **GPIO**, so 12 V automotive signals never
+  touch the 3.3 V pins.
+- A **buck converter** stepping the car's 12 V down to 5 V for the Pi.
+- Everything mounted in a 3D-printed enclosure behind the display.
+
+The complete build, seen from the back:
+
+![back of the cluster — Raspberry Pi 5, CANable USB-CAN adapter, optocoupler board and buck converter](docs/cluster-back.jpg)
 
 ## What it shows
 
