@@ -49,6 +49,11 @@ board (bottom-left) and buck converter (centre):
 
 ![back of the cluster](docs/cluster-back.jpg)
 
+The whole assembly drops into the **original VW Gol G1 instrument cluster housing** — the OEM
+dash plastic is reused as the enclosure, so it fits the car's binnacle exactly:
+
+![cluster mounted in the original dash housing](docs/cluster-installed.jpg)
+
 ## How it works
 
 ```
@@ -69,7 +74,7 @@ the UI.
 cluster.py          Kivy app: Dashboard + CarClusterApp; window/gauge config; render loop + demo
 start_cluster.py    Production entry point — spawns CAN + GPIO reader threads, runs the app
 model.py            SensorState / IoState — the thread-safe shared data model
-can_helper.py       read_can(): decode the FTCAN simplified broadcast into SensorState
+can_helper.py       read_can(): decode the FTCAN 2.0 tagged real-time broadcast into SensorState
 gpio_helper.py      read_io(): read GPIO pins into SensorState.io (+ change-logging)
 demo.py             simulate(t): the drive simulation used by no-CAN demo mode
 theme.py            All colours and layout constants
@@ -152,13 +157,76 @@ Three names have to line up:
 Then `./deploy.sh`. To discover which physical switch is on which pin, run `./logs.sh gpio` and
 flip switches one at a time — the pin that logs `-> ON` is the one.
 
-## FuelTech CAN notes
+## Decoding FTCAN 2.0
 
-`can_helper.py` currently decodes the FTCAN 2.0 **simplified broadcast** — four fixed frames
-(`0x14080600`–`0x14080603`, extended IDs) carrying RPM, MAP/boost, air/engine/oil temps, oil/fuel/
-water pressures, gear, lambda, pit-limit and the four wheel speeds. Signals like the radiator-fan
-output, 2-step/launch status and individual ECU output states live in FuelTech's **real-time
-tagged broadcast** (not yet read by this project) — see the FTCAN 2.0 protocol spec for the map.
+`can_helper.py` decodes FuelTech's **real-time tagged broadcast** — the self-describing stream
+where each frame carries `(measure, value)` pairs rather than a fixed field layout. This is the
+hard part of the project, so it's worth spelling out.
+
+**The bus.** A FuelTech ECU broadcasts on a 1 Mbit/s bus using **29-bit extended** CAN IDs. The
+real-time reading broadcast is the family whose *MessageID* (the CAN ID's low byte) is `0xFF`, so
+the listener subscribes to exactly that family at the socket level and lets the kernel drop
+everything else:
+
+```python
+filters = [{"can_id": 0x000000FF, "can_mask": 0x000000FF, "extended": True}]
+```
+
+Every FuelTech device on the wire (ECU, wideband, …) broadcasts here, so one listener sees them
+all without caring which node a measure came from.
+
+**Measures.** The payload is a sequence of 4-byte pairs — `MeasureID` (2 bytes) then `Value`
+(2 bytes), both **big-endian**. The MeasureID packs a data id and a status bit together:
+
+```
+MeasureID = (DataID << 1) | status_bit     ⇒   DataID = mid >> 1
+```
+
+`DataID` is the catalogue number of the quantity (`0x0042` = RPM, `0x0002` = MAP, …); the low bit
+is a per-measure status flag. Values are decoded as **signed 16-bit** (two's complement) so
+vacuum (negative MAP) and sub-zero temperatures come through correctly, then scaled by a
+per-DataID multiplier from `MEASURE_MAP` — e.g. MAP arrives in `mbar`-ish counts and is scaled by
+`0.001` to bar, RPM is `×1`. A handful of DataIDs aren't plain numbers and are special-cased: gear
+is a *signed* index mapped to a label (`-1 → "R"`, `0 → "N"`, …), launch mode is "nonzero = 2-step
+armed", and a tentative day/night id drives the display dimming.
+
+**Three frame layouts.** Which layout a frame uses is encoded in its *DataFieldID* — bits 11–13 of
+the CAN ID, `(cid >> 11) & 0x7`:
+
+| Layout | How to tell | Payload |
+| --- | --- | --- |
+| **Standard CAN** | `DataFieldID == 0` | the 8 data bytes *are* `(MeasureID, Value)` pairs |
+| **FTCAN single packet** | first byte `0xFF` | pairs follow the `0xFF` marker |
+| **FTCAN segmented** | first byte is a segment index | reassemble across frames (below) |
+
+**Segmented reassembly.** A burst that doesn't fit in 8 bytes is split across frames. Segment `0`
+opens with a 2-byte **total length** followed by the start of the payload; each continuation frame
+appends its bytes (after its 1-byte index); once the buffer reaches the declared length it's sliced
+back to size and parsed into pairs. The reassembly buffer is keyed per CAN ID, so interleaved
+multi-frame messages from different devices don't corrupt each other:
+
+```python
+elif b0 == 0x00:                    # segment 0: [total_len:2][payload…]
+    total = (data[1] << 8) | data[2]
+    seg[cid] = [total, bytearray(data[3:])]
+elif cid in seg:                    # continuation: append, flush when complete
+    seg[cid][1] += bytes(data[1:])
+    total, buf = seg[cid]
+    if len(buf) >= total:
+        _pairs(bytes(buf[:total]), out)
+        del seg[cid]
+```
+
+Decoded measures are merged into `SensorState` in one locked `update()` (which also stamps the
+CAN-activity clock that gates demo mode), so the render loop only ever sees whole, consistent
+frames.
+
+**Discovery.** Not every signal is mapped yet — the radiator-fan output (an ECU **output bitmask**,
+not a named measure) and a few status bits still need to be identified on the live car. `can_helper.py`
+ships a `log_realtime()` logger that prints every real-time DataID **on change** (tag `[canrt]`), and
+`decode_dump.py` does the same against a saved capture (`dump.txt`) — flip the fan, watch which
+DataID/bit moves, then add it to `MEASURE_MAP`. The protocol itself is documented in
+`Protocol_FTCAN20.pdf` (image-only; render the pages with `pdftoppm -png` to read the measure table).
 
 ## Status
 
