@@ -10,6 +10,10 @@ no-box centre readout, and tell-tale "pills" that stay dark until they have some
 
 ![cluster](docs/cluster.png)
 
+Running in the car ([full video](docs/cluster-demo.mp4)):
+
+![cluster running](docs/cluster-demo.gif)
+
 ## Hardware
 
 - **Raspberry Pi 5** running **Armbian** (Debian bookworm), displaying full-screen via Kivy on
