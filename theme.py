@@ -39,6 +39,14 @@ LAMBDA_RICH = (1.000, 0.541, 0.302, 1.0)   # #ff8a4d
 LAMBDA_LEAN = (1.000, 0.819, 0.302, 1.0)   # #ffd14d
 LAMBDA_STOICH = (0.498, 0.839, 0.639, 1.0)  # #7fd6a3
 
+# EGT per-cylinder balance readout (4 dots): green when a channel is in line with
+# the others, reddening as it deviates from the group median.
+EGT_BALANCED = (0.200, 0.819, 0.478, 1.0)    # #33d17a in-balance (green)
+EGT_UNBALANCED = (1.000, 0.231, 0.188, 1.0)  # #ff3b30 deviating (red)
+EGT_INACTIVE = (0.353, 0.651, 0.918, 0.16)   # faint dot when no EGT data
+EGT_SPREAD_RED = 100.0   # °C deviation from the median that reads as fully red
+EGT_ACTIVE_MIN = 80.0    # below this (cold / engine off) the readout is inactive
+
 # critical alarm banner (lean / overheat / oil pressure)
 ALARM_BG = (0.86, 0.07, 0.05, 1.0)         # vivid red banner
 ALARM_TEXT = (1.0, 1.0, 1.0, 1.0)          # white alarm text

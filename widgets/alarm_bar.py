@@ -32,7 +32,8 @@ class AlarmBar(Widget):
         self._on = True
         self._ev = None
         self._layout()
-        Window.bind(size=lambda *_: self._layout())
+        Window.bind(size=lambda *_: self._layout(),
+                    on_resize=lambda *_: self._layout())
 
     def _layout(self, *_):
         self._bg.pos = (0, 0)
@@ -48,6 +49,7 @@ class AlarmBar(Widget):
             return
         self._alarms = alarms
         if alarms:
+            self._layout()   # re-match the current window width (it has settled by now)
             self._label.text = "      ".join(alarms)
             if self._ev is None:
                 self._ev = Clock.schedule_interval(self._blink, ALARM_BLINK)

@@ -49,6 +49,11 @@ class SensorState:
     night: bool = False          # ECU day/night mode (night = dim the display)
     battery: float = 0.0         # battery voltage (V)
     fuel_level: float = 0.0      # %
+    # exhaust gas temperature, per cylinder (°C) — fed by the EGT-4 CAN module
+    egt1: float = 0.0
+    egt2: float = 0.0
+    egt3: float = 0.0
+    egt4: float = 0.0
     # wheel speeds (km/h)
     wheel_speed_fr_kmh: float = 0.0
     wheel_speed_fl_kmh: float = 0.0

@@ -57,7 +57,15 @@ def simulate(t):
         boost, lam, intake = -0.4, 1.03, 48
         coolant = _lerp(101, 96, p)
 
+    # EGT per cylinder — rises with load; cyl 3 drifts hot on boost to show the
+    # balance dots turning red, otherwise the four sit close (all green).
+    base_egt = max(140.0, _lerp(360, 900, _ease(min(1.0, (rpm - 900) / 6000))) + boost * 90)
+    offsets = [6.0, -10.0, (95.0 if boost > 0.8 else 12.0), -4.0]
+    egt = [base_egt + o for o in offsets]
+
     return {
         "rpm": rpm, "speed": speed, "map": boost, "lambda_afr": lam,
         "engine_temp": coolant, "air_temp": intake, "oil": oil, "fuel": fuel,
+        "oiltemp": coolant + 8,   # oil runs a little hotter than coolant
+        "egt1": egt[0], "egt2": egt[1], "egt3": egt[2], "egt4": egt[3],
     }

@@ -86,6 +86,7 @@ ALARM_LEAN_LAMBDA = 1.05       # lean mixture
 ALARM_OVERHEAT_C = 110         # coolant overheat
 ALARM_OIL_PRESS_BAR = 1.0      # minimum oil pressure...
 ALARM_OIL_PRESS_RPM = 1500     # ...only checked above this rpm (idle runs lower)
+ALARM_EGT_C = 750              # any cylinder EGT above this is too hot
 
 # After this many seconds with no CAN frame, run the animated demo loop so the
 # cluster shows live values on a bench / when not connected to the car.
@@ -176,7 +177,9 @@ class Dashboard(Widget):
             fuel_press_bar=state.fuel_pressure_bar,
             gear=state.gear_label,
             rpm=state.rpm,
+            oil_temp=state.oil_temp,
         )
+        self.center_info.set_egt((state.egt1, state.egt2, state.egt3, state.egt4))
 
         self.top_alerts.set_state(state)
         self.night_dim.set_night(state.night)
@@ -197,6 +200,8 @@ class Dashboard(Widget):
         # low oil pressure, but only above idle (idle naturally runs lower)
         if state.rpm > ALARM_OIL_PRESS_RPM and state.oil_pressure_bar < ALARM_OIL_PRESS_BAR:
             alarms.append("OIL PRESSURE")
+        if max(state.egt1, state.egt2, state.egt3, state.egt4) > ALARM_EGT_C:
+            alarms.append("EGT")
         return alarms
 
 
@@ -252,7 +257,9 @@ class CarClusterApp(App):
         s.engine_temp = vals["engine_temp"]
         s.air_temp = vals["air_temp"]
         s.oil_pressure_bar = vals["oil"]
+        s.oil_temp = vals["oiltemp"]
         s.fuel_level = vals["fuel"]
+        s.egt1, s.egt2, s.egt3, s.egt4 = vals["egt1"], vals["egt2"], vals["egt3"], vals["egt4"]
 
 
 def run_cluster(state):

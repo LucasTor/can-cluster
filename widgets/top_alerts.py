@@ -79,7 +79,7 @@ class TellTale(Widget):
         else:
             self._mark_col.a = 0                          # no triangle on text pills
             self._label = Label(
-                text=label, font_name=FONT_MONO, font_size="16sp",
+                text=label, font_name=FONT_MONO, font_size="16sp", bold=True,
                 color=PILL_OFF_TEXT, halign="center", valign="middle",
             )
             self.add_widget(self._label)
@@ -130,7 +130,7 @@ class TopAlerts(Widget):
     PILLS = [
         ("left",  {"arrow": "left"},   TT_GREEN, False),
         ("high",  {"label": "HIGH"},   TT_BLUE,  False),
-        ("choke", {"label": "CHOKE"},  TT_AMBER, False),
+        ("choke", {"label": "FLATSHIFT"}, TT_AMBER, False),  # choke lever reused for flat-foot shifting
         ("oil",   {"label": "OIL"},    TT_RED,   True),
         ("batt",  {"label": "BATT"},   TT_RED,   False),
         ("temp",  {"label": "TEMP"},   TT_RED,   True),

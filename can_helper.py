@@ -109,13 +109,36 @@ def _apply(state, measures):
         state.update(updates)
 
 
+# EGT-4 module simplified broadcast (read-only): the EGT-4 CAN module (e.g. our ESP32,
+# or a real FuelTech unit) broadcasts 4 channels here — int16 big-endian, 0.125 C/bit
+# at bytes 0-1/2-3/4-5/6-7. See EGT_README.md. We read it straight off the bus to show
+# per-cylinder EGT on the dash, independent of whether the ECU re-broadcasts it.
+EGT4_ID = 0x02400000        # FuelTech EGT-4 model A
+EGT4_SCALE = 0.125          # degC per bit
+
+
+def _decode_egt4(data):
+    """Decode the EGT-4 simplified packet into {egt1..egt4} (°C)."""
+    if len(data) < 8:
+        return {}
+    out = {}
+    for i in range(4):
+        raw = (data[i * 2] << 8) | data[i * 2 + 1]
+        out[f"egt{i + 1}"] = _signed(raw) * EGT4_SCALE
+    return out
+
+
 def read_can(interface="socketcan", channel="can0", state=None):
     if state is None:
         state = SensorState()
     print("Starting FTCAN 2.0 tagged-broadcast listener on", channel, flush=True)
 
-    # Real-time broadcast frames have a low byte of 0xFF (any FuelTech device).
-    filters = [{"can_id": 0x000000FF, "can_mask": 0x000000FF, "extended": True}]
+    # Real-time broadcast frames have a low byte of 0xFF (any FuelTech device); plus
+    # the EGT-4 module's simplified packet (a fixed extended ID).
+    filters = [
+        {"can_id": 0x000000FF, "can_mask": 0x000000FF, "extended": True},
+        {"can_id": EGT4_ID, "can_mask": 0x1FFFFFFF, "extended": True},
+    ]
     bus = can.Bus(interface=interface, channel=channel,
                   receive_own_messages=False, can_filters=filters)
     seg = {}
@@ -125,6 +148,9 @@ def read_can(interface="socketcan", channel="can0", state=None):
             if msg is None:
                 continue
             if not msg.is_extended_id:
+                continue
+            if msg.arbitration_id == EGT4_ID:
+                state.update(_decode_egt4(msg.data))
                 continue
             _apply(state, _decode(msg.arbitration_id, msg.data, seg))
     except KeyboardInterrupt:
