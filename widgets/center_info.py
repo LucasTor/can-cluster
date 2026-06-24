@@ -20,7 +20,7 @@ from theme import (
     FONT_MONO, VALUE, LABEL_DIM, LABEL_ACCENT, UNIT_DIM, HAIRLINE,
     BOOST_NORMAL, TT_RED, TT_AMBER, CARD_WIDTH, CARD_HEIGHT,
     WINDOW_HEIGHT,
-    EGT_BALANCED, EGT_UNBALANCED, EGT_INACTIVE, EGT_SPREAD_RED, EGT_ACTIVE_MIN,
+    EGT_BALANCED, EGT_MID, EGT_UNBALANCED, EGT_INACTIVE, EGT_SPREAD_RED, EGT_ACTIVE_MIN,
 )
 from .readout import Readout
 
@@ -43,6 +43,15 @@ def _egt_median(vals):
 
 def _egt_lerp(a, b, k):
     return tuple(a[j] + (b[j] - a[j]) * k for j in range(4))
+
+
+def _egt_color(k):
+    """Heat-scale colour for a balance deviation k (0..1): green -> amber -> red.
+    Routed through amber so mid-range values stay a clean colour instead of the
+    muddy brown a direct green->red RGB lerp produces."""
+    if k <= 0.5:
+        return _egt_lerp(EGT_BALANCED, EGT_MID, k * 2.0)
+    return _egt_lerp(EGT_MID, EGT_UNBALANCED, (k - 0.5) * 2.0)
 
 
 class _EgtDot(Widget):
@@ -245,7 +254,7 @@ class CenterInfo(Widget):
                 self._egt_vals[i].color = (1, 1, 1, 0.25)
                 continue
             k = min(1.0, abs(temps[i] - ref) / EGT_SPREAD_RED)
-            self._egt_dots[i].set_color(_egt_lerp(EGT_BALANCED, EGT_UNBALANCED, k))
+            self._egt_dots[i].set_color(_egt_color(k))
             self._egt_vals[i].text = f"{int(round(temps[i]))}"
             self._egt_vals[i].color = VALUE
 
