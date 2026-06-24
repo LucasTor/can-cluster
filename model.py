@@ -18,6 +18,7 @@ class IoState:
     left_indicator: bool = False
     right_indicator: bool = False
     high_beam: bool = False
+    choke: bool = False
     parking_brake: bool = False
 
     def update(self, values):

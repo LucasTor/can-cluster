@@ -130,6 +130,7 @@ class TopAlerts(Widget):
     PILLS = [
         ("left",  {"arrow": "left"},   TT_GREEN, False),
         ("high",  {"label": "HIGH"},   TT_BLUE,  False),
+        ("choke", {"label": "CHOKE"},  TT_AMBER, False),
         ("oil",   {"label": "OIL"},    TT_RED,   True),
         ("batt",  {"label": "BATT"},   TT_RED,   False),
         ("temp",  {"label": "TEMP"},   TT_RED,   True),
@@ -199,6 +200,7 @@ class TopAlerts(Widget):
             "left":  io.left_indicator,
             "right": io.right_indicator,
             "high":  io.high_beam,
+            "choke": io.choke,
             "temp":  state.engine_temp > 100,
             # genuine loss of oil pressure only (avoid false alarms at rest)
             "oil":   state.rpm > 500 and 0 < state.oil_pressure_bar < 0.8,

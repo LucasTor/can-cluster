@@ -97,9 +97,10 @@ name has no matching field. Then `set_state` maps `io.<field>` → a pill key. T
   (FAN pill, 2-STEP wired) exist, but **no CAN source feeds them yet** — needs a tagged-broadcast
   reader in `can_helper.py` and the fan's output number. Until then both pills stay dark.
 - **GPIO pin map is being discovered** by the owner via `./logs.sh gpio` (toggle a switch, see
-  which GPIO logs `-> ON`). Known: `LEFT_INDICATOR=6, RIGHT_INDICATOR=21, HIGH_BEAM=13,
-  PARKING_BRAKE=16`; `B=20, C=5, D=19, E=26` still unknown. `PARKING_BRAKE` isn't wired to a
-  tell-tale yet (no `IoState.parking_brake` / `brake` mapping).
+  which GPIO logs `-> ON`). Known: `HIGH_BEAM=6, LEFT_INDICATOR=21, RIGHT_INDICATOR=16, CHOKE=13,
+  PARKING_BRAKE=5`; `B=20, D=19, E=26` still unknown. `PARKING_BRAKE` → BRAKE pill, `HIGH_BEAM` →
+  HIGH pill, `CHOKE` → CHOKE pill, indicators → ◄ ► arrows. **CHOKE is active-high** — it's in
+  `gpio_helper.INVERTED`, so its reading is inverted vs. the active-low default of the other pins.
 - A **plymouth VW-logo boot splash** was attempted and **fully reverted** (couldn't get the logo
   to composite without seeing the screen; logo went off-screen). Boot logs are back to normal.
   `vw-logo.avif` is kept in the repo. If retrying, prefer a built-in plymouth image theme over a

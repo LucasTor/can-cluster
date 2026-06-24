@@ -166,7 +166,7 @@ class CenterInfo(Widget):
 
     def set_values(self, intake_c=None, water_c=None, oil_press_bar=None,
                    lambda_val=None, boost_bar=None, fuel_level=None,
-                   fuel_press_bar=None, gear=None):
+                   fuel_press_bar=None, gear=None, rpm=None):
         self.readouts["air"].set(intake_c)
         self.readouts["engine"].set(water_c)
         self.readouts["oil"].set(oil_press_bar)
@@ -181,9 +181,13 @@ class CenterInfo(Widget):
 
         if lambda_val is not None:
             self.lambda_value.text = f"{lambda_val:.2f}"
+            # Below ~500 rpm the engine isn't burning, so lambda reads pegged-lean
+            # on ambient O2 — suppress the RICH/LEAN alert and stay neutral.
+            if rpm is not None and rpm < 500:
+                self.lambda_value.color, self.lambda_tag.text = BOOST_NORMAL, "STOICH"
             # Match the rest of the cluster's palette: accent blue when safe,
             # amber when rich, red when lean (lean is the dangerous side).
-            if lambda_val < 0.85:
+            elif lambda_val < 0.85:
                 self.lambda_value.color, self.lambda_tag.text = TT_AMBER, "RICH"
             elif lambda_val > 1.05:
                 self.lambda_value.color, self.lambda_tag.text = TT_RED, "LEAN"

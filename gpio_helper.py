@@ -5,14 +5,18 @@ import RPi.GPIO as GPIO
 from model import SensorState
 
 class Pin(Enum):
-    LEFT_INDICATOR = 6
-    RIGHT_INDICATOR = 21
-    HIGH_BEAM = 13
-    PARKING_BRAKE = 16
+    HIGH_BEAM = 6
+    LEFT_INDICATOR = 21
+    RIGHT_INDICATOR = 16
+    CHOKE = 13
+    PARKING_BRAKE = 5
     B = 20
-    C = 5
     D = 19
     E = 26
+
+# Switches read active-low (pull-up + switch to ground) by default. Pins listed
+# here are wired the opposite way and read active-high (inverted).
+INVERTED = {Pin.CHOKE}
 
 def read_io(state=None):
     if state is None:
@@ -29,7 +33,8 @@ def read_io(state=None):
         while True:
             readings = {}
             for pin in Pin:
-                active = not GPIO.input(pin.value)
+                raw = bool(GPIO.input(pin.value))
+                active = raw if pin in INVERTED else not raw
                 readings[pin.name.lower()] = active
                 # log only on change so toggling a switch reveals its pin
                 if prev.get(pin.name) != active:

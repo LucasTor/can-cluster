@@ -26,8 +26,8 @@ Running in the car ([full video](docs/cluster-demo.mp4)):
   arc + needle, steady red `SHIFT!`.
 - **Centre readout** (no box) — AIR / ENGINE / OIL / FUEL micro-grid, then big **BOOST** and
   **LAMBDA** with colour cues (lambda RICH/STOICH/LEAN, boost red over 1.32 bar).
-- **Tell-tales** — a top row of pills: turn signals (◄ ►), HIGH beam, OIL, TEMP, FAN, FUEL,
-  BRAKE, 2-STEP, etc. Plus a standalone **WIFI** pill (top-left, hidden unless connected).
+- **Tell-tales** — a top row of pills: turn signals (◄ ►), HIGH beam, CHOKE, OIL, TEMP, FAN,
+  FUEL, BRAKE, 2-STEP, etc. Plus a standalone **WIFI** pill (top-left, hidden unless connected).
 - **No-CAN demo mode** — after ~3 s with no CAN frames (on a bench), an animated drive loop
   plays so the cluster is alive without the car. Real data takes over the moment it appears.
 
@@ -39,7 +39,7 @@ Running in the car ([full video](docs/cluster-demo.mp4)):
 - A **CANable V2.0 Pro** USB↔CAN adapter (socketcan, `can0`) connecting the Pi to the
   **FuelTech ECU**, which broadcasts FTCAN 2.0.
 - An **8-channel optocoupler board** isolating the car's dashboard switches (turn signals, high
-  beam, parking brake, …) before they reach the Pi's **GPIO**, so 12 V automotive signals never
+  beam, choke, parking brake, …) before they reach the Pi's **GPIO**, so 12 V automotive signals never
   touch the 3.3 V pins.
 - A **buck converter** stepping the car's 12 V down to 5 V for the Pi.
 - Everything mounted in a 3D-printed enclosure behind the display.
@@ -148,7 +148,7 @@ The app is headless, so the systemd journal is the way to check on it:
 
 Three names have to line up:
 
-1. **`gpio_helper.py`** — a `Pin` enum entry, e.g. `PARKING_BRAKE = 16` (name = BCM pin).
+1. **`gpio_helper.py`** — a `Pin` enum entry, e.g. `PARKING_BRAKE = 5` (name = BCM pin).
 2. **`model.py`** — an `IoState` field with the **same name lowercased**, e.g. `parking_brake: bool`.
    (`IoState.update()` drops any reading whose pin name has no matching field.)
 3. **`widgets/top_alerts.py`** — in `set_state`, point a pill key at it (`"brake": io.parking_brake`),

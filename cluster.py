@@ -175,6 +175,7 @@ class Dashboard(Widget):
             fuel_level=state.fuel_level,
             fuel_press_bar=state.fuel_pressure_bar,
             gear=state.gear_label,
+            rpm=state.rpm,
         )
 
         self.top_alerts.set_state(state)
@@ -185,6 +186,10 @@ class Dashboard(Widget):
     def _alarms(state):
         """Active critical alarms for the bottom banner."""
         alarms = []
+        # engine not running (off / cranking) — these readings aren't meaningful
+        # (lambda pegs lean on ambient O2, etc.), so keep the banner clear.
+        if state.rpm < 500:
+            return alarms
         if state.lambda_afr > ALARM_LEAN_LAMBDA:
             alarms.append("LEAN")
         if state.engine_temp > ALARM_OVERHEAT_C:
